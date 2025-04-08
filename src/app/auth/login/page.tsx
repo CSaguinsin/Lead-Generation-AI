@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
 import { login } from '@/app/auth/login/actions';
+import Navbar from '@/app/components/UI/navbar';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -31,6 +32,8 @@ export default function Login() {
   };
 
   return (
+    <>
+      <Navbar />
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
@@ -135,11 +138,12 @@ export default function Login() {
 
         <div className="text-center text-sm text-gray-600">
           Don't have an account?{' '}
-          <a href="/signup" className="font-medium text-orange-600 hover:text-orange-500">
+          <a onClick={() => router.push('/auth/signup')} className="font-medium text-orange-600 hover:text-orange-500">
             Sign up
           </a>
         </div>
       </div>
     </div>
+    </>
   );
 }

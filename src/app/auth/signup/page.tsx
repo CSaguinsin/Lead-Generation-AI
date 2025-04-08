@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { FiUser, FiMail, FiLock, FiArrowRight } from 'react-icons/fi';
 import { signup, type SignupState } from '@/app/auth/signup/actions';
+import Navbar from '@/app/components/UI/navbar';
 
 const initialState: SignupState = {
   error: null,
@@ -15,6 +16,8 @@ export default function Signup() {
 
 
   return (
+    <>
+      <Navbar />
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
@@ -158,5 +161,6 @@ export default function Signup() {
         </div>
       </div>
     </div>
+    </>
   );
 }

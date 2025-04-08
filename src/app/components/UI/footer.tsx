@@ -23,15 +23,6 @@ export default function Footer() {
           </div>
           
           <p className="text-gray-400 text-sm">© {new Date().getFullYear()} Lead Generator AI. All rights reserved.</p>
-          
-          <div className="mt-4 md:mt-0">
-            <select className="bg-gray-800 text-gray-400 py-2 px-3 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-orange-500">
-              <option value="en">English (US)</option>
-              <option value="es">Español</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-            </select>
-          </div>
         </div>
       </div>
     </footer>

@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Users, Building, Mail, ChevronRight } from "lucide-react";
+import { Users, Building, Mail, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRouter } from 'next/navigation'
 
 export default function HeroSection() {
+  const router = useRouter()
   const [isScrolled, setIsScrolled] = useState(false);
   const [isClient, setIsClient] = useState(false);
   
@@ -102,6 +104,7 @@ export default function HeroSection() {
                 className="flex flex-wrap gap-4 pt-4"
               >
                 <Button 
+                  onClick={() => router.push('/auth/signup')}
                   className="h-14 px-8 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-all text-lg"
                 >
                   Get started <ChevronRight className="ml-2 h-5 w-5" />
@@ -112,25 +115,6 @@ export default function HeroSection() {
                 >
                   Watch demo
                 </Button>
-              </motion.div>
-              
-              <motion.div
-                variants={fadeIn}
-                custom={4}
-                className="pt-12"
-              >
-                <p className="text-sm text-gray-400 mb-6">Trusted by sales teams at companies like:</p>
-                <div className="flex flex-wrap gap-8 items-center">
-                  <div className="h-8 w-auto opacity-70 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                    <img src="/api/placeholder/120/32" alt="Company logo" className="h-full w-auto invert" />
-                  </div>
-                  <div className="h-8 w-auto opacity-70 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                    <img src="/api/placeholder/120/32" alt="Company logo" className="h-full w-auto invert" />
-                  </div>
-                  <div className="h-8 w-auto opacity-70 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
-                    <img src="/api/placeholder/120/32" alt="Company logo" className="h-full w-auto invert" />
-                  </div>
-                </div>
               </motion.div>
             </motion.div>
           </div>

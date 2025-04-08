@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Database, Menu, X, ChevronDown } from "lucide-react"
 import { useRouter } from 'next/navigation'
-
 
 export default function Navbar() {
   const router = useRouter()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   
   // Handle scroll effect for navbar
   useEffect(() => {
@@ -22,12 +22,39 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
   
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.body.style.overflow = 'hidden' // Prevent scrolling when menu is open
+    } else {
+      document.body.style.overflow = 'auto'
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.body.style.overflow = 'auto'
+    }
+  }, [isMenuOpen])
+  
   // Toggle mobile menu
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen)
   }
   
-  // Toggle dropdown menus - fixed the TypeScript error by adding proper type annotation
+  // Close menu when navigating
+  const handleNavigation = (path: string) => {
+    router.push(path)
+    setIsMenuOpen(false)
+  }
+  
+  // Toggle dropdown menus
   const toggleDropdown = (name: string) => {
     setActiveDropdown(activeDropdown === name ? null : name)
   }
@@ -42,43 +69,11 @@ export default function Navbar() {
               <div className="bg-gradient-to-r from-orange-400 to-orange-600 p-2 rounded-lg">
                 <Database className="h-5 w-5 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-gray-900">Lead Generator AI</span>
+              <span className="text-xl font-bold tracking-tight text-gray-900" onClick={() => router.push('/')}>
+                Lead Generator AI
+              </span>
             </div>
           </div>
-          
-          {/* Center section - Navigation (desktop only) */}
-          <nav className="hidden lg:flex justify-center flex-1 ml-8">
-            <ul className="flex space-x-1">
-              <li className="relative group">
-                <button 
-                  onClick={() => toggleDropdown('features')} 
-                  className="px-4 py-2 rounded-full flex items-center space-x-1 hover:bg-orange-50 transition-colors text-gray-700"
-                >
-                  <span>Features</span>
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-                {activeDropdown === 'features' && (
-                  <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-lg p-4 w-64">
-                    <div className="space-y-2">
-                      <a href="#" className="block px-3 py-2 rounded-md hover:bg-orange-50 text-gray-700">Lead Generation</a>
-                      <a href="#" className="block px-3 py-2 rounded-md hover:bg-orange-50 text-gray-700">AI Analysis</a>
-                      <a href="#" className="block px-3 py-2 rounded-md hover:bg-orange-50 text-gray-700">Contact Management</a>
-                    </div>
-                  </div>
-                )}
-              </li>
-              <li>
-                <a href="#how-it-works" className="px-4 py-2 rounded-full inline-block hover:bg-orange-50 transition-colors text-gray-700">
-                  How It Works
-                </a>
-              </li>
-              <li>
-                <a href="#pricing" className="px-4 py-2 rounded-full inline-block hover:bg-orange-50 transition-colors text-gray-700">
-                  Pricing
-                </a>
-              </li>
-            </ul>
-          </nav>
           
           {/* Right section - CTA buttons */}
           <div className="hidden lg:flex items-center space-x-3">
@@ -99,41 +94,36 @@ export default function Navbar() {
         </div>
       </div>
       
-      {/* Mobile menu drawer */}
-      {isMenuOpen && (
-        <div className="lg:hidden fixed inset-0 bg-white z-50 pt-20">
+      {/* Mobile menu drawer with backdrop */}
+      <div className={`lg:hidden fixed inset-0 z-40 transition-all duration-300 ease-in-out ${isMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setIsMenuOpen(false)}
+        />
+        
+        {/* Menu content */}
+        <div 
+          ref={menuRef}
+          className={`absolute top-20 right-0 w-full bg-white shadow-lg transition-transform duration-300 ease-in-out ${isMenuOpen ? 'translate-y-0' : '-translate-y-full'}`}
+        >
           <div className="container mx-auto px-4 py-8">
             <nav>
               <ul className="space-y-6">
-                <li>
-                  <button 
-                    onClick={() => toggleDropdown('mobileFeatures')}
-                    className="flex items-center justify-between w-full text-lg text-gray-700"
-                  >
-                    <span>Features</span>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${activeDropdown === 'mobileFeatures' ? 'rotate-180' : ''}`} />
-                  </button>
-                  {activeDropdown === 'mobileFeatures' && (
-                    <div className="mt-3 pl-4 space-y-3 border-l-2 border-orange-200">
-                      <a href="#" className="block py-2 text-gray-700 hover:text-orange-600">Lead Generation</a>
-                      <a href="#" className="block py-2 text-gray-700 hover:text-orange-600">AI Analysis</a>
-                      <a href="#" className="block py-2 text-gray-700 hover:text-orange-600">Contact Management</a>
-                    </div>
-                  )}
-                </li>
-                <li>
-                  <a href="#how-it-works" className="block text-lg text-gray-700 hover:text-orange-600">How It Works</a>
-                </li>
-                <li>
-                  <a href="#pricing" className="block text-lg text-gray-700 hover:text-orange-600">Pricing</a>
-                </li>
                 <li className="pt-6 border-t">
-                  <Button variant="ghost" className="w-full justify-center text-lg text-gray-700 hover:text-orange-600">
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-center text-lg text-gray-700 hover:text-orange-600"
+                    onClick={() => handleNavigation('/auth/login')}
+                  >
                     Log in
                   </Button>
                 </li>
                 <li>
-                  <Button className="w-full justify-center py-6 text-lg bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-white">
+                  <Button 
+                    className="w-full justify-center py-6 text-lg bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-white"
+                    onClick={() => handleNavigation('/auth/signup')}
+                  >
                     Get Started
                   </Button>
                 </li>
@@ -141,7 +131,7 @@ export default function Navbar() {
             </nav>
           </div>
         </div>
-      )}
+      </div>
     </header>
   )
 }
