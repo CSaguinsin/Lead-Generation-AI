@@ -3,8 +3,11 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Database, Menu, X, ChevronDown } from "lucide-react"
+import { useRouter } from 'next/navigation'
+
 
 export default function Navbar() {
+  const router = useRouter()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
@@ -79,10 +82,10 @@ export default function Navbar() {
           
           {/* Right section - CTA buttons */}
           <div className="hidden lg:flex items-center space-x-3">
-            <Button variant="ghost" className="rounded-full text-gray-700 hover:text-orange-600 hover:bg-orange-50">
+            <Button onClick={() => router.push('/auth/login')} variant="ghost" className="rounded-full text-gray-700 hover:text-orange-600 hover:bg-orange-50">
               Log in
             </Button>
-            <Button className="rounded-full px-6 py-5 bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-white">
+            <Button onClick={() => router.push('/auth/signup')} className="rounded-full px-6 py-5 bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-white">
               Get Started
             </Button>
           </div>
