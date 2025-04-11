@@ -36,7 +36,7 @@ lead-generator-ai/
 │   ├── app/                 # App router pages
 │   │   ├── dashboard/       # Dashboard and main app screens
 │   │   ├── auth/            # Authentication pages
-│   │   └── api/             # API routes
+│   │   └── api/             # API routes 
 │   │       ├── email/       # Email discovery endpoints
 │   │       ├── company/     # Company data endpoints
 │   │       └── leads/       # Lead management endpoints

@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AddLeadModal } from "@/app/components/dashboard/AddLeadModal"
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -40,6 +41,14 @@ export default function DashboardPage() {
       setIsLoading(false)
     }, 1500)
   }
+
+  const handleLeadAdded = () => {
+    refreshData();
+    // In a real app, you would:
+    // 1. Save the new lead to Supabase
+    // 2. Update the leads state with the new lead
+    // 3. Possibly show a toast notification
+  };
 
   const container = {
     hidden: { opacity: 0 },
@@ -65,10 +74,7 @@ export default function DashboardPage() {
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" className="h-9 bg-orange-500 hover:bg-orange-600">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Lead
-          </Button>
+          <AddLeadModal onLeadAdded={handleLeadAdded} />
         </div>
       </div>
 
