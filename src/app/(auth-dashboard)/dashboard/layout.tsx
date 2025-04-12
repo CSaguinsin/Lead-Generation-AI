@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -45,11 +45,39 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { logout } from "@/app/auth/logout/actions"
 import { AIChatbot } from "@/app/components/dashboard/AIChatbot"
+import { getCurrentUser, type UserProfile } from "@/app/actions/user"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const profile = await getCurrentUser()
+        setUserProfile(profile)
+      } catch (error) {
+        console.error("Error fetching user profile:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchUserProfile()
+  }, [])
+
+  // Get user initials for avatar fallback
+  const getInitials = () => {
+    if (!userProfile?.full_name) return "U"
+    
+    const nameParts = userProfile.full_name.split(" ")
+    if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase()
+    
+    return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase()
+  }
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -115,11 +143,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-3">
               <Avatar>
                 <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarFallback>{isLoading ? "..." : getInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
-                <span className="text-sm font-medium">John Doe</span>
-                <span className="text-xs text-gray-500">john@example.com</span>
+                <span className="text-sm font-medium">
+                  {isLoading ? "Loading..." : userProfile?.full_name || "User"}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {isLoading ? "..." : userProfile?.email || ""}
+                </span>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -191,11 +223,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarImage src="/placeholder.svg?height=40&width=40" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarFallback>{isLoading ? "..." : getInitials()}</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium">John Doe</span>
-                    <span className="text-xs text-gray-500">john@example.com</span>
+                    <span className="text-sm font-medium">
+                      {isLoading ? "Loading..." : userProfile?.full_name || "User"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {isLoading ? "..." : userProfile?.email || ""}
+                    </span>
                   </div>
                   <Button 
                     variant="ghost" 
@@ -240,7 +276,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <Button variant="ghost" size="icon" className="rounded-full">
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                        <AvatarFallback>JD</AvatarFallback>
+                        <AvatarFallback>{isLoading ? "..." : getInitials()}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
