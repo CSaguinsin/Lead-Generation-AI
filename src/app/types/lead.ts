@@ -29,6 +29,8 @@ export interface ProfileData {
   }>;
 }
 
+// Define the LeadStatus type
+export type LeadStatus = 'verified' | 'unverified' | 'pending';
 
 export interface Lead {
   id?: string;
@@ -38,7 +40,8 @@ export interface Lead {
   position?: string | null;
   company: string;
   domain: string;
-  status: 'verified' | 'unverified';
+  status: LeadStatus;
+  avatar?: string; // Added avatar property
   email_quality?: {
     deliverable: boolean;
     quality_score: string;
@@ -72,8 +75,6 @@ export interface Lead {
   created_by?: string;
   enriched_at?: string;
 }
-
-
 
 export interface EnrichedLead {
   contact: {

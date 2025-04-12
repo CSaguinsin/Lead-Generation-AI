@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { logout } from "@/app/auth/logout/actions"
+import { AIChatbot } from "@/app/components/dashboard/AIChatbot"
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -58,32 +59,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ]
 
-// In your dashboard/layout.tsx
-const handleLogout = async () => {
-  setIsLoggingOut(true)
-  try {
-    const response = await fetch('/auth/logout', {
-      method: 'POST',
-      redirect: 'manual'
-    })
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      const response = await fetch('/auth/logout', {
+        method: 'POST',
+        redirect: 'manual'
+      })
 
-    // Handle successful logout
-    if (response.status === 0 || response.ok) {
-      window.location.href = '/'
-    } else {
-      console.error('Logout failed')
-      // Show error to user (e.g., using toast)
+      // Handle successful logout
+      if (response.status === 0 || response.ok) {
+        window.location.href = '/'
+      } else {
+        console.error('Logout failed')
+        // Show error to user (e.g., using toast)
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      setIsLoggingOut(false)
     }
-  } catch (error) {
-    console.error('Logout error:', error)
-  } finally {
-    setIsLoggingOut(false)
   }
-}
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen bg-orange-50">
+      <div className="flex h-screen bg-orange-50 overflow-x-hidden">
         {/* Desktop Sidebar */}
         <Sidebar className="hidden md:flex">
           <SidebarHeader className="border-b border-orange-100 px-4 py-3">
@@ -213,7 +213,7 @@ const handleLogout = async () => {
         </Sheet>
 
         {/* Main Content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden overflow-x-hidden">
           {/* Top Navigation */}
           <header className="bg-white border-b border-orange-100 px-4 py-3 md:px-6">
             <div className="flex items-center justify-between">
@@ -270,9 +270,15 @@ const handleLogout = async () => {
             </div>
           </header>
 
-          {/* Page Content */}
-          <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
+            {children}
+          </main>
         </div>
+      </div>
+      
+      {/* Floating AI Chatbot */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <AIChatbot />
       </div>
     </SidebarProvider>
   )

@@ -1,7 +1,7 @@
 // lib/supabase/leads.ts
 import { createClient as createClientBrowser } from "@/utils/supabase/client";
 import { createClient as createServerClient } from "@/utils/supabase/server";
-import { Lead } from "@/app/types/lead";
+import { Lead, LeadStatus } from "@/app/types/lead";
 
 export async function saveLead(
   enrichedData: {
@@ -54,51 +54,109 @@ export async function saveLead(
     position: enrichedData.contact.position || null,
     company: enrichedData.company.name,
     domain: enrichedData.company.domain,
-    status: enrichedData.contact.emailQuality.deliverable ? 'verified' : 'unverified',
-    email_quality: enrichedData.contact.emailQuality,
-    company_data: {
-      name: enrichedData.company.name,
-      industry: enrichedData.company.industry,
-      size: enrichedData.company.size,
-      location: enrichedData.company.location,
-      linkedin_url: enrichedData.contact.linkedinUrl
-    },
-    profile_data: enrichedData.profile || null,
+    status: enrichedData.contact.emailQuality.deliverable ? "verified" : "unverified",
+    deliverable: enrichedData.contact.emailQuality.deliverable,
+    quality_score: enrichedData.contact.emailQuality.quality_score,
+    is_valid_format: enrichedData.contact.emailQuality.is_valid_format,
     linkedin_url: enrichedData.contact.linkedinUrl || null,
+    created_by: userId,
     created_at: new Date().toISOString(),
-    created_by: userId // This should match the authenticated user ID from the server action
+    enriched_at: new Date().toISOString(),
   };
 
   try {
     const { data, error } = await supabase
-      .from('leads')
+      .from("leads")
       .insert(leadData)
-      .select('*')
+      .select()
       .single();
 
     if (error) {
-      console.error('Supabase Error Details:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      });
+      console.error("Error saving lead:", error);
       throw error;
     }
 
     return data;
   } catch (error) {
-    console.error('Full Error Context:', {
-      error,
-      leadData: {
-        ...leadData,
-        company_data: '[REDACTED]',
-        profile_data: '[REDACTED]'
-      },
-      userId
-    });
+    console.error(
+      "Failed to save lead:",
+      error instanceof Error ? error.message : 'Failed to save lead'
+    );
     throw new Error(
       error instanceof Error ? error.message : 'Failed to save lead'
     );
+  }
+}
+
+// Function to fetch leads from Supabase
+export async function getLeads(filter?: LeadStatus) {
+  const supabase = await createServerClient();
+  
+  try {
+    let query = supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    // Apply filter if provided
+    if (filter) {
+      query = query.eq('status', filter);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching leads:', error);
+      throw error;
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Failed to fetch leads:', error);
+    throw new Error('Failed to fetch leads');
+  }
+}
+
+// Function to get lead statistics
+export async function getLeadStats() {
+  const supabase = await createServerClient();
+  
+  try {
+    // Get total leads count
+    const { count: totalLeadsCount, error: totalError } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true });
+      
+    if (totalError) throw totalError;
+    
+    // Get verified leads count
+    const { count: verifiedLeadsCount, error: verifiedError } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'verified');
+      
+    if (verifiedError) throw verifiedError;
+    
+    // Ensure we have valid numbers by using nullish coalescing
+    const totalLeads = totalLeadsCount ?? 0;
+    const verifiedLeads = verifiedLeadsCount ?? 0;
+    
+    // Calculate conversion rate
+    const conversionRate = totalLeads > 0 ? ((verifiedLeads / totalLeads) * 100).toFixed(1) : '0';
+    
+    return {
+      totalLeads,
+      verifiedLeads,
+      conversionRate: `${conversionRate}%`,
+      activeCampaigns: 0 // Placeholder for future implementation
+    };
+  } catch (error) {
+    console.error('Failed to fetch lead statistics:', error);
+    return {
+      totalLeads: 0,
+      verifiedLeads: 0,
+      conversionRate: '0%',
+      activeCampaigns: 0
+    };
   }
 }
