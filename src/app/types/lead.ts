@@ -1,0 +1,98 @@
+// types/lead.ts
+export interface EmailQuality {
+  deliverable: boolean;
+  quality_score: string;
+  is_valid_format: boolean;
+}
+
+export interface CompanyData {
+  name: string;
+  industry?: string;
+  size?: string;
+  location?: {
+    country: string;
+    locality: string;
+  };
+  linkedin_url?: string;
+}
+
+export interface ProfileData {
+  summary?: string;
+  experiences?: Array<{
+    company: string;
+    title: string;
+    duration: string;
+  }>;
+  education?: Array<{
+    school: string;
+    degree: string;
+  }>;
+}
+
+
+export interface Lead {
+  id?: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  position?: string | null;
+  company: string;
+  domain: string;
+  status: 'verified' | 'unverified';
+  email_quality?: {
+    deliverable: boolean;
+    quality_score: string;
+    is_valid_format: boolean;
+  };
+  company_data?: {
+    name?: string;
+    industry?: string;
+    size?: string;
+    location?: {
+      country: string;
+      locality: string;
+    };
+    linkedin_url?: string;
+  };
+  profile_data?: {
+    summary?: string;
+    experiences?: Array<{
+      company: string;
+      title: string;
+      duration: string;
+    }>;
+    education?: Array<{
+      school: string;
+      degree: string;
+    }>;
+  };
+  linkedin_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  enriched_at?: string;
+}
+
+
+
+export interface EnrichedLead {
+  contact: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    position?: string;
+    emailQuality: EmailQuality;
+    linkedinUrl?: string;
+  };
+  company: {
+    name: string;
+    domain: string;
+    industry?: string;
+    size?: string;
+    location?: {
+      country: string;
+      locality: string;
+    };
+  };
+  profile?: ProfileData;
+}

@@ -1,18 +1,17 @@
 // app/api/hunter/proxy/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
     // Verify API key exists
     if (!process.env.HUNTER_API_KEY) {
-      console.error('Hunter API key missing');
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { error: "Server configuration error" },
         { status: 500 }
       );
     }
 
-    const { firstName, lastName, domain, company } = await request.json();
+    const { firstName, lastName, domain, company } = await req.json();
 
     // Clean domain input
     const cleanDomain = domain
@@ -20,7 +19,7 @@ export async function POST(request: Request) {
       .split('/')[0]
       .trim();
 
-    // Construct Hunter.io URL
+    // Build query parameters
     const params = new URLSearchParams({
       domain: cleanDomain,
       first_name: firstName,
@@ -30,43 +29,28 @@ export async function POST(request: Request) {
     
     if (company) params.append('company', company);
 
-    const hunterUrl = `https://api.hunter.io/v2/email-finder?${params.toString()}`;
-    
     // Make request to Hunter.io
-    const response = await fetch(hunterUrl);
-    const responseText = await response.text();
-
-    // Check for HTML response
-    if (responseText.startsWith('<!DOCTYPE') || responseText.startsWith('<')) {
-      console.error('HTML Response from Hunter.io:', {
+    const response = await fetch(`https://api.hunter.io/v2/email-finder?${params}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Hunter API Error:', {
         status: response.status,
-        headers: Object.fromEntries(response.headers),
-        body: responseText.slice(0, 500)
+        error: errorText.slice(0, 500)
       });
       return NextResponse.json(
-        { error: 'Received HTML response from API - check server logs' },
-        { status: 502 }
+        { error: "Failed to fetch from Hunter.io" },
+        { status: response.status }
       );
     }
 
-    // Parse JSON
-    try {
-      const data = JSON.parse(responseText);
-      return NextResponse.json(data);
-    } catch (error) {
-      console.error('JSON Parse Error:', {
-        responseText: responseText.slice(0, 500)
-      });
-      return NextResponse.json(
-        { error: 'Invalid API response format' },
-        { status: 502 }
-      );
-    }
+    const data = await response.json();
+    return NextResponse.json(data);
 
   } catch (error) {
-    console.error('Proxy Error:', error);
+    console.error('Proxy Server Error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

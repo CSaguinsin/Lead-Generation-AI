@@ -1,31 +1,52 @@
 // components/AddLeadModal.tsx
-"use client"
+'use client';
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useState, useActionState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { findEmail } from "@/app/api/hunter";
-import { Loader2, Plus } from "lucide-react";
-import { saveLead } from "@/lib/supabase/leads";
+} from '@/components/ui/dialog';
+import { Loader2, Plus, Check, X } from 'lucide-react';
+import { handleLeadEnrichment } from '@/app/actions/enrichLead';
+import { Badge } from '@/components/ui/badge';
+
+function SubmitButton({ pending }: { pending: boolean }) {
+  return (
+    <Button type="submit" disabled={pending} className="w-full">
+      {pending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Processing...
+        </>
+      ) : (
+        'Find and Enrich Lead'
+      )}
+    </Button>
+  );
+}
+
+interface EnrichmentStatus {
+  emailFinder?: 'pending' | 'success' | 'error';
+  emailValidation?: 'pending' | 'success' | 'error';
+  companyEnrichment?: 'pending' | 'success' | 'error';
+  profileEnrichment?: 'pending' | 'success' | 'error';
+}
 
 export function AddLeadModal({ onLeadAdded }: { onLeadAdded: () => void }) {
   const [open, setOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [foundEmail, setFoundEmail] = useState<string | null>(null);
+  const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>({});
+  const [state, formAction, isPending] = useActionState(handleLeadEnrichment, null);
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    domain: "",
-    company: "",
+    firstName: '',
+    lastName: '',
+    domain: '',
+    company: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,62 +56,31 @@ export function AddLeadModal({ onLeadAdded }: { onLeadAdded: () => void }) {
     });
   };
 
-// In your AddLeadModal component
-const handleFindEmail = async () => {
-  if (!formData.firstName || !formData.lastName || !formData.domain) {
-    setError("First name, last name, and domain are required");
-    return;
-  }
+  // Reset status when modal opens/closes
+  useEffect(() => {
+    if (open) {
+      setEnrichmentStatus({});
+    }
+  }, [open]);
 
-  // Clean the domain input before sending
-  const cleanDomain = formData.domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
-
-  setIsLoading(true);
-  setError(null);
-  setFoundEmail(null);
-
-  try {
-    const result = await findEmail(
-      formData.firstName,
-      formData.lastName,
-      formData.domain,
-      formData.company
-    );
-    
-    console.log('API Response:', result);
-    setFoundEmail(result.email);
-    
-  } catch (err) {
-    console.error('Detailed Error:', {
-      error: err,
-      inputs: formData,
-      timestamp: new Date().toISOString()
-    });
-    setError(err instanceof Error ? err.message : "Failed to find email");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!foundEmail) return;
-  
-    try {
-      await saveLead({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        email: foundEmail,
-        company: formData.company,
-        domain: formData.domain,
-        status: 'unverified', // You might want to use Hunter's verification status
-      });
-      
-      onLeadAdded();
+  // Handle the response from the server action
+  useEffect(() => {
+    if (state?.success) {
       setOpen(false);
-    } catch (err) {
-      setError('Failed to save lead to database');
+      onLeadAdded();
+    }
+  }, [state, onLeadAdded]);
+
+  const getStatusIcon = (status?: string) => {
+    switch (status) {
+      case 'success':
+        return <Check className="h-4 w-4 text-green-500" />;
+      case 'error':
+        return <X className="h-4 w-4 text-red-500" />;
+      case 'pending':
+        return <Loader2 className="h-4 w-4 animate-spin" />;
+      default:
+        return null;
     }
   };
 
@@ -102,31 +92,49 @@ const handleFindEmail = async () => {
           Add Lead
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Add New Lead</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={formAction}>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name *</Label>
+              <Input
+                id="firstName"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name *</Label>
+              <Input
+                id="lastName"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="firstName">First Name</Label>
+            <Label htmlFor="domain">Domain *</Label>
             <Input
-              id="firstName"
-              name="firstName"
-              value={formData.firstName}
+              id="domain"
+              name="domain"
+              value={formData.domain}
               onChange={handleChange}
+              placeholder="example.com"
               required
             />
+            <p className="text-xs text-gray-500">
+              Enter just the domain (e.g., whitecloak.com) without https:// or www
+            </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="lastName">Last Name</Label>
-            <Input
-              id="lastName"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleChange}
-              required
-            />
-          </div>
+
           <div className="space-y-2">
             <Label htmlFor="company">Company (Optional)</Label>
             <Input
@@ -136,57 +144,43 @@ const handleFindEmail = async () => {
               onChange={handleChange}
             />
           </div>
+
+          {/* Enrichment Progress Indicator */}
           <div className="space-y-2">
-            <Label htmlFor="domain">Domain (e.g., example.com)</Label>
-            <Input
-              id="domain"
-              name="domain"
-              value={formData.domain}
-              onChange={handleChange}
-              placeholder="example.com" // Show example format
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Enter just the domain (e.g., whitecloak.com) without https:// or www
-            </p>
+            <Label>Enrichment Progress</Label>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                {getStatusIcon(enrichmentStatus.emailFinder)}
+                <span>Email Discovery</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {getStatusIcon(enrichmentStatus.emailValidation)}
+                <span>Email Validation</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {getStatusIcon(enrichmentStatus.companyEnrichment)}
+                <span>Company Data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {getStatusIcon(enrichmentStatus.profileEnrichment)}
+                <span>Profile Data</span>
+              </div>
+            </div>
           </div>
 
-          <Button
-            type="button"
-            onClick={handleFindEmail}
-            disabled={isLoading || !formData.firstName || !formData.lastName || !formData.domain}
-            variant="outline"
-            className="w-full"
-          >
-            {isLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              "Find Email"
-            )}
-            Find Email
-          </Button>
+          <SubmitButton pending={isPending} />
 
-          {error && (
-            <div className="text-sm text-red-500">{error}</div>
-          )}
-
-          {foundEmail && (
-            <div className="space-y-2">
-              <Label>Found Email</Label>
-              <Input
-                value={foundEmail}
-                readOnly
-                className="font-mono bg-gray-100"
-              />
-              <p className="text-sm text-gray-500">
-                Email found with Hunter.io
-              </p>
+          {state?.error && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+              {state.error}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={!foundEmail}>
-            Add Lead
-          </Button>
+          {state?.success && (
+            <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-600">
+              Lead successfully added!
+            </div>
+          )}
         </form>
       </DialogContent>
     </Dialog>
