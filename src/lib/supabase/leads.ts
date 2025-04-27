@@ -16,6 +16,10 @@ export async function saveLead(
         is_valid_format: boolean;
       };
       linkedinUrl?: string;
+      phoneNumber?: string;
+      phoneType?: string;
+      phoneCountry?: string;
+      phoneData?: any;
     };
     company: {
       name: string;
@@ -59,6 +63,10 @@ export async function saveLead(
     quality_score: enrichedData.contact.emailQuality.quality_score,
     is_valid_format: enrichedData.contact.emailQuality.is_valid_format,
     linkedin_url: enrichedData.contact.linkedinUrl || null,
+    phone_number: enrichedData.contact.phoneNumber || null,
+    phone_type: enrichedData.contact.phoneType || null,
+    phone_country: enrichedData.contact.phoneCountry || null,
+    phone_data: enrichedData.contact.phoneData || null,
     created_by: userId,
     created_at: new Date().toISOString(),
     enriched_at: new Date().toISOString(),

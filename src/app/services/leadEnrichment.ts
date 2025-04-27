@@ -1,7 +1,7 @@
 // services/leadEnrichment.ts
 import { findEmail } from "@/lib/api/hunter";
 import { verifyEmail } from "@/lib/api/abstract";
-import { getCompanyData } from "@/lib/api/pdl";
+import { getCompanyData, findPersonWithPDL } from "@/lib/api/pdl";
 import { getLinkedInProfile } from "@/lib/api/proxycurl";
 import { EnrichedLead } from "@/app/types/lead";
 
@@ -24,10 +24,68 @@ export async function enrichLead(
   let profileData;
   if (emailData.linkedin_url) {
     try {
-      profileData = await getLinkedInProfile(emailData.linkedin_url);
+      // First try to get LinkedIn profile data from PDL
+      const pdlPersonData = await findPersonWithPDL({
+        firstName,
+        lastName,
+        company: companyName,
+        email: emailData.email,
+        linkedin_url: emailData.linkedin_url
+      });
+      
+      if (pdlPersonData && (pdlPersonData.experience || pdlPersonData.education)) {
+        // Transform PDL data to match our profile structure
+        profileData = {
+          summary: pdlPersonData.summary || '',
+          experiences: pdlPersonData.experience?.map((exp: any) => ({
+            company: exp.company?.name || '',
+            title: exp.title || '',
+            duration: `${exp.start_date || ''} - ${exp.end_date || 'Present'}`
+          })) || [],
+          education: pdlPersonData.education?.map((edu: any) => ({
+            school: edu.school?.name || '',
+            degree: edu.degree?.name || ''
+          })) || []
+        };
+      } else {
+        // Fallback to Proxycurl if PDL doesn't have profile data
+        profileData = await getLinkedInProfile(emailData.linkedin_url);
+      }
     } catch (error) {
       console.error('LinkedIn profile enrichment failed:', error);
+      // Try Proxycurl as fallback if PDL fails
+      try {
+        profileData = await getLinkedInProfile(emailData.linkedin_url);
+      } catch (fallbackError) {
+        console.error('Fallback LinkedIn profile enrichment failed:', fallbackError);
+      }
     }
+  }
+
+  // Step 5: Find phone number using PDL instead of Apollo
+  let phoneData = null;
+  try {
+    const pdlPersonData = await findPersonWithPDL({
+      firstName,
+      lastName,
+      company: companyName,
+      email: emailData.email,
+      domain
+    });
+    
+    if (pdlPersonData?.phone) {
+      phoneData = {
+        number: pdlPersonData.phone,
+        phone_data: {
+          type: 'unknown',
+          country_code: '',
+          verified: false,
+          source: 'pdl'
+        }
+      };
+    }
+  } catch (error) {
+    console.error('Phone number discovery with PDL failed:', error);
   }
 
   return {
@@ -35,9 +93,12 @@ export async function enrichLead(
       firstName,
       lastName,
       email: emailData.email,
-      position: emailData.position ?? undefined, // Convert null to undefined
+      position: emailData.position ?? undefined,
       emailQuality,
-      linkedinUrl: emailData.linkedin_url ?? undefined // Convert null to undefined
+      linkedinUrl: emailData.linkedin_url ?? undefined,
+      phoneNumber: phoneData?.number,
+      phoneType: phoneData?.phone_data?.type,
+      phoneCountry: phoneData?.phone_data?.country_code
     },
     company: {
       name: companyData.name || companyName || '',
