@@ -74,8 +74,11 @@ export interface Lead {
   updated_at?: string;
   created_by?: string;
   enriched_at?: string;
+  phone_number?: string;
+  phone_data?: PhoneData;
 }
 
+// src/app/types/lead.ts
 export interface EnrichedLead {
   contact: {
     firstName: string;
@@ -84,6 +87,10 @@ export interface EnrichedLead {
     position?: string;
     emailQuality: EmailQuality;
     linkedinUrl?: string;
+    phoneNumber?: string;
+    phoneType?: string;
+    phoneCountry?: string;
+    phoneData?: any;
   };
   company: {
     name: string;
@@ -96,4 +103,11 @@ export interface EnrichedLead {
     };
   };
   profile?: ProfileData;
+}
+
+export interface PhoneData {
+  type: string;
+  country_code?: string;
+  verified: boolean;
+  source: string;
 }

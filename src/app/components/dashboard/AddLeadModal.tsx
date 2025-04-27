@@ -36,6 +36,7 @@ interface EnrichmentStatus {
   emailValidation?: 'pending' | 'success' | 'error';
   companyEnrichment?: 'pending' | 'success' | 'error';
   profileEnrichment?: 'pending' | 'success' | 'error';
+  phoneDiscovery?: 'pending' | 'success' | 'error';
 }
 
 export function AddLeadModal({ onLeadAdded }: { onLeadAdded: () => void }) {
@@ -164,6 +165,10 @@ export function AddLeadModal({ onLeadAdded }: { onLeadAdded: () => void }) {
               <div className="flex items-center gap-2">
                 {getStatusIcon(enrichmentStatus.profileEnrichment)}
                 <span>Profile Data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {getStatusIcon(enrichmentStatus.phoneDiscovery)}
+                <span>Phone Discovery</span>
               </div>
             </div>
           </div>
