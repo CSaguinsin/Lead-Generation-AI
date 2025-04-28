@@ -58,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const fetchUserProfile = async () => {
       try {
         const profile = await getCurrentUser()
+        console.log("Fetched user profile:", profile)
         setUserProfile(profile)
       } catch (error) {
         console.error("Error fetching user profile:", error)
@@ -90,18 +91,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleLogout = async () => {
     setIsLoggingOut(true)
     try {
-      const response = await fetch('/auth/logout', {
-        method: 'POST',
-        redirect: 'manual'
-      })
-
-      // Handle successful logout
-      if (response.status === 0 || response.ok) {
-        window.location.href = '/'
-      } else {
-        console.error('Logout failed')
-        // Show error to user (e.g., using toast)
-      }
+      await logout()
+      window.location.href = '/'
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
