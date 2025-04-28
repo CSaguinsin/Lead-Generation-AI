@@ -78,9 +78,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Leads", href: "/dashboard/leads", icon: Users },
-    { name: "Campaigns", href: "/dashboard/campaigns", icon: Mail },
-    { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-    { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ]
 
   const handleLogout = async () => {
@@ -166,32 +163,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {!collapsed && (
               <>
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-500 px-3 mb-2">RESOURCES</p>
-                  <div className="space-y-1">
-                    <Link
-                      href="#"
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-all"
-                    >
-                      <Briefcase className="h-5 w-5 text-gray-500" />
-                      <span>Integrations</span>
-                    </Link>
-                    <Link
-                      href="#"
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-all"
-                    >
-                      <Zap className="h-5 w-5 text-gray-500" />
-                      <span>Automations</span>
-                    </Link>
-                    <Link
-                      href="#"
-                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-600 transition-all"
-                    >
-                      <LifeBuoy className="h-5 w-5 text-gray-500" />
-                      <span>Help Center</span>
-                    </Link>
-                  </div>
-                </div>
 
                 <div className="px-3 py-4">
                   <div className="rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 p-4">
