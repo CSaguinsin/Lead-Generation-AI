@@ -2,6 +2,7 @@ import { LeadGenerationService, LeadSearchFilters, LeadSearchResults, LeadSource
 import PDLService from '@/services/leadGeneration/services/pdlService';
 import HunterService from '@/services/leadGeneration/services/hunterService';
 import ClearbitService from '@/services/leadGeneration/services/clearbitService';
+import CoresignalService from '@/services/leadGeneration/services/coresignalService';
 
 /**
  * Registry of all available lead generation services
@@ -25,11 +26,13 @@ class LeadGenerationRegistry {
       const pdlService = new PDLService();
       const hunterService = new HunterService();
       const clearbitService = new ClearbitService();
+      const coresignalService = new CoresignalService();
       
       // Register services
       this.register(pdlService);
       this.register(hunterService);
       this.register(clearbitService);
+      this.register(coresignalService);
       
       // Build source list (configuration information for the UI)
       await this.refreshSources();

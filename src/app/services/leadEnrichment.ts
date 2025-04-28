@@ -1,7 +1,7 @@
 // services/leadEnrichment.ts
 import { findEmail } from "@/lib/api/hunter";
 import { verifyEmail } from "@/lib/api/abstract";
-import { getCompanyData, findPersonWithPDL } from "@/lib/api/pdl";
+import { getCompanyData, findPersonWithPDL, identifyPersonWithPDL } from "@/lib/api/pdl";
 import { getLinkedInProfile } from "@/lib/api/proxycurl";
 import { EnrichedLead } from "@/app/types/lead";
 
@@ -65,24 +65,48 @@ export async function enrichLead(
   // Step 5: Find phone number using PDL instead of Apollo
   let phoneData = null;
   try {
-    const pdlPersonData = await findPersonWithPDL({
+    // First try to use the PDL Person Identify API for better phone number retrieval
+    const pdlIdentifyData = await identifyPersonWithPDL({
       firstName,
       lastName,
       company: companyName,
       email: emailData.email,
-      domain
+      domain,
+      linkedin_url: emailData.linkedin_url || undefined
     });
     
-    if (pdlPersonData?.phone) {
+    if (pdlIdentifyData?.phone) {
+      // If we get a phone from Identify API, use it
       phoneData = {
-        number: pdlPersonData.phone,
+        number: pdlIdentifyData.phone,
         phone_data: {
-          type: 'unknown',
-          country_code: '',
-          verified: false,
-          source: 'pdl'
+          type: pdlIdentifyData.phones?.[0]?.type || 'unknown',
+          country_code: pdlIdentifyData.phones?.[0]?.country_code || '',
+          verified: true, // Higher confidence from Identify API
+          source: 'pdl_identify'
         }
       };
+    } else {
+      // Fallback to the Enrich API if Identify API doesn't return a phone
+      const pdlPersonData = await findPersonWithPDL({
+        firstName,
+        lastName,
+        company: companyName,
+        email: emailData.email,
+        domain
+      });
+      
+      if (pdlPersonData?.phone) {
+        phoneData = {
+          number: pdlPersonData.phone,
+          phone_data: {
+            type: pdlPersonData.phones?.[0]?.type || 'unknown',
+            country_code: pdlPersonData.phones?.[0]?.country_code || '',
+            verified: false,
+            source: 'pdl_enrich'
+          }
+        };
+      }
     }
   } catch (error) {
     console.error('Phone number discovery with PDL failed:', error);

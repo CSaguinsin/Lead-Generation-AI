@@ -43,6 +43,8 @@ interface PDLPersonResponse {
     first_seen: string;
     last_seen: string;
     num_sources: number;
+    type?: string;
+    country_code?: string;
   }>;
   phone?: string; // This will be populated by our converter
   job_title?: string;
@@ -191,6 +193,82 @@ export async function findPersonWithPDL(params: PDLPersonParams): Promise<PDLPer
     return personData;
   } catch (error) {
     console.error('PDL Person API Error:', {
+      params,
+      error: axios.isAxiosError(error) ? {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message
+      } : error
+    });
+    
+    // If it's a 404 (not found), return null instead of throwing an error
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return null;
+    }
+    
+    // For other errors, log but don't throw to prevent breaking the enrichment flow
+    return null;
+  }
+}
+
+/**
+ * Find a person using PDL's Person Identify API
+ * This function provides better matching and phone number retrieval compared to the Enrich API
+ */
+export async function identifyPersonWithPDL(params: PDLPersonParams): Promise<PDLPersonResponse | null> {
+  try {
+    // Verify API key exists
+    if (!process.env.PDL_API_KEY) {
+      throw new Error('PDL API key not configured');
+    }
+
+    // Build request parameters - Person Identify API requires different parameter structure
+    const requestParams: Record<string, string> = {};
+    
+    if (params.firstName && params.lastName) {
+      requestParams.first_name = params.firstName;
+      requestParams.last_name = params.lastName;
+    }
+    
+    if (params.company) {
+      requestParams.company = params.company;
+    }
+    
+    if (params.email) {
+      requestParams.email = params.email;
+    }
+    
+    if (params.linkedin_url) {
+      requestParams.profile = params.linkedin_url;
+    }
+    
+    // Call PDL Person Identify API
+    const response = await axios.get<PDLPersonResponse>(
+      'https://api.peopledatalabs.com/v5/person/identify',
+      {
+        params: requestParams,
+        headers: {
+          'X-Api-Key': process.env.PDL_API_KEY,
+          'Accept-Encoding': 'gzip',
+        },
+        timeout: 10000,
+      }
+    );
+
+    // Process the response to extract phone number
+    const personData = response.data;
+    
+    // Extract primary phone if available and add it as a simplified field
+    if (personData.phones && personData.phones.length > 0) {
+      personData.phone = personData.phones[0].number;
+    } else if (personData.phone_numbers && personData.phone_numbers.length > 0) {
+      personData.phone = personData.phone_numbers[0];
+    }
+    
+    return personData;
+  } catch (error) {
+    console.error('PDL Person Identify API Error:', {
       params,
       error: axios.isAxiosError(error) ? {
         status: error.response?.status,

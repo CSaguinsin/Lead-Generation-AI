@@ -29,8 +29,13 @@ export interface ProfileData {
   }>;
 }
 
-// Define the LeadStatus type
-export type LeadStatus = 'verified' | 'unverified' | 'pending';
+// Define the LeadStatus enum
+export enum LeadStatus {
+  Verified = 'verified',
+  Unverified = 'unverified',
+  Pending = 'pending',
+  New = 'new'
+}
 
 export interface Lead {
   id?: string;

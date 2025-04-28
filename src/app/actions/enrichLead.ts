@@ -4,15 +4,28 @@
 import { enrichLead } from '../services/leadEnrichment';
 import { saveLead } from '@/lib/supabase/leads';
 import { createClient } from '@/utils/supabase/server';
+import { cookies } from 'next/headers';
 
 export async function handleLeadEnrichment(prevState: any, formData: FormData) {
   const supabase = await createClient();
   
   try {
-    // Get the authenticated user securely
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Get the user ID from the cookie instead of using Supabase Auth
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value;
 
-    if (authError || !user) {
+    if (!userId) {
+      throw new Error('Authentication required: Please log in to save leads');
+    }
+
+    // Fetch the user from the database to verify they exist
+    const { data: user, error: userError } = await supabase
+      .from('user_clients')
+      .select('id, full_name, email')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
       throw new Error('Authentication required: Please log in to save leads');
     }
 
@@ -27,9 +40,8 @@ export async function handleLeadEnrichment(prevState: any, formData: FormData) {
 
     const enrichedData = await enrichLead(firstName, lastName, domain, company);
     
-    // The saveLead function now gets the authenticated user ID from the session
-    // We still pass the user.id for logging/debugging purposes
-    await saveLead(enrichedData, user.id);
+    // Pass the user ID from the cookie for saving the lead
+    await saveLead(enrichedData, userId);
 
     return { success: true, error: null };
   } catch (error) {

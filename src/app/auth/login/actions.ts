@@ -33,10 +33,9 @@ export async function login(formData: FormData) {
   console.log('User found:', userClient.full_name, 'with ID:', userClient.id)
 
   // Set a cookie with the user's ID
-  // Using @ts-ignore to bypass the TypeScript error with cookies().set
-  // This is a known issue with Next.js types
-  // @ts-ignore
-  cookies().set({
+  // Get the cookies instance and await it
+  const cookieStore = await cookies()
+  cookieStore.set({
     name: 'user_id',
     value: userClient.id,
     httpOnly: true,

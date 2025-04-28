@@ -101,7 +101,7 @@ export async function searchLeadsPDL(filters: SearchFilters) {
     // Build request payload with the proper query structure
     const requestPayload = {
       query: esQuery,
-      size: 25,
+      size: 100,
       pretty: false,
       fields: [
         'name',
@@ -128,7 +128,7 @@ export async function searchLeadsPDL(filters: SearchFilters) {
       // Call PDL Search API
       const response = await axios.post(
         'https://api.peopledatalabs.com/v5/person/search', 
-        requestPayload,
+        JSON.stringify(requestPayload),
         {
           headers: {
             'Content-Type': 'application/json',
