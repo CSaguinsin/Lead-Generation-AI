@@ -50,7 +50,30 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
           pretty: true
         };
 
-        // Add identifying information from search result
+        // IMPORTANT FIX: First add the original search filters to ensure we're respecting the search criteria
+        if (filters.title && filters.title !== 'any') {
+          identifyParams.title = filters.title;
+        }
+        
+        if (filters.company && filters.company !== 'any') {
+          identifyParams.company = filters.company;
+        }
+        
+        if (filters.location && filters.location !== 'any') {
+          identifyParams.location = filters.location;
+        }
+        
+        if (filters.industry && filters.industry !== 'all') {
+          // Industry isn't directly supported by Identify API, but we'll keep the filter consistent
+          // by ensuring we only use company matches that would match this industry
+          if (person.job_company_industry !== filters.industry) {
+            console.log('Skipping person due to industry mismatch:', person.name);
+            continue;
+          }
+        }
+
+        // Now add identifying information from search result as additional context
+        // but don't override the original filters
         if (person.first_name && person.last_name) {
           identifyParams.first_name = person.first_name;
           identifyParams.last_name = person.last_name;
@@ -62,11 +85,13 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
           }
         }
 
-        if (person.job_company_name) {
+        // Only add company from person if we don't already have a company filter
+        if (!identifyParams.company && person.job_company_name) {
           identifyParams.company = person.job_company_name;
         }
 
-        if (person.job_title) {
+        // Only add title from person if we don't already have a title filter
+        if (!identifyParams.title && person.job_title) {
           identifyParams.title = person.job_title;
         }
 
@@ -75,11 +100,14 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
         }
 
         // Ensure we have at least one parameter to identify the person
-        if (!identifyParams.first_name && !identifyParams.profile && !identifyParams.email) {
+        if (!identifyParams.first_name && !identifyParams.profile && !identifyParams.email && 
+            !identifyParams.company && !identifyParams.title && !identifyParams.location) {
           console.log('Insufficient data to identify person:', person);
           enhancedResults.push(formatIdentifyResponse(person));
           continue;
         }
+
+        console.log('Identify API parameters:', identifyParams);
 
         // Add delay between requests to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -100,14 +128,35 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
         if (response.data) {
           // Merge search result data with identify data
           const identifyData = response.data;
-          enhancedResults.push(formatIdentifyResponse({
-            ...person,
-            ...identifyData,
-            // Preserve original search data if identify doesn't have it
-            job_title: identifyData.job_title || person.job_title,
-            job_company_name: identifyData.job_company_name || person.job_company_name,
-            linkedin_url: identifyData.linkedin_url || person.linkedin_url
-          }));
+          
+          // Verify that the identified person matches our original search criteria
+          let matchesSearchCriteria = true;
+          
+          if (filters.title && filters.title !== 'any' && 
+              identifyData.job_title && !identifyData.job_title.toLowerCase().includes(filters.title.toLowerCase())) {
+            console.log('Identified person does not match title criteria:', identifyData.job_title);
+            matchesSearchCriteria = false;
+          }
+          
+          if (filters.company && filters.company !== 'any' && 
+              identifyData.job_company_name && !identifyData.job_company_name.toLowerCase().includes(filters.company.toLowerCase())) {
+            console.log('Identified person does not match company criteria:', identifyData.job_company_name);
+            matchesSearchCriteria = false;
+          }
+          
+          // Only add the result if it matches our search criteria
+          if (matchesSearchCriteria) {
+            enhancedResults.push(formatIdentifyResponse({
+              ...person,
+              ...identifyData,
+              // Preserve original search data if identify doesn't have it
+              job_title: identifyData.job_title || person.job_title,
+              job_company_name: identifyData.job_company_name || person.job_company_name,
+              linkedin_url: identifyData.linkedin_url || person.linkedin_url
+            }));
+          } else {
+            console.log('Skipping result that does not match search criteria');
+          }
         } else {
           // If identify fails, format the original search result
           enhancedResults.push(formatIdentifyResponse(person));
