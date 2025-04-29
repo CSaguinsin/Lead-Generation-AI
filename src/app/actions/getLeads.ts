@@ -1,9 +1,9 @@
 'use server';
 
 import { getLeads, getLeadStats } from '@/lib/supabase/leads';
-import { Lead } from '@/app/types/lead';
+import { Lead, LeadStatus } from '@/app/types/lead';
 
-export async function fetchLeads(filter?: 'verified' | 'unverified'): Promise<Lead[]> {
+export async function fetchLeads(filter?: LeadStatus): Promise<Lead[]> {
   try {
     const leads = await getLeads(filter);
     return leads;

@@ -1,7 +1,6 @@
 'use server';
 
 import axios from 'axios';
-import { Lead, LeadStatus } from '@/app/types/lead';
 import { mapJobLevelToTitle, mapCompanySizeToRange } from '@/utils/pdlHelpers';
 
 interface SearchFilters {
@@ -11,6 +10,27 @@ interface SearchFilters {
   industry?: string;
   companySize?: string;
   jobLevel?: string;
+}
+
+// Define a type for PDL Elasticsearch query
+interface PDLElasticsearchQuery {
+  bool: {
+    must: Array<{
+      match?: Record<string, string>;
+      bool?: {
+        should: Array<{
+          match: Record<string, string>;
+        }>;
+        minimum_should_match: number;
+      };
+      range?: {
+        [key: string]: {
+          gte?: number;
+          lte?: number;
+        };
+      };
+    }>;
+  };
 }
 
 export async function searchLeadsPDL(filters: SearchFilters) {
@@ -23,7 +43,7 @@ export async function searchLeadsPDL(filters: SearchFilters) {
 
     // Build PDL Elasticsearch query using correct field names
     // According to the PDL documentation
-    const esQuery: any = {
+    const esQuery: PDLElasticsearchQuery = {
       bool: {
         must: []
       }

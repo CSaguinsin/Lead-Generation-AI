@@ -42,7 +42,7 @@ interface EnrichmentStatus {
 export function AddLeadModal({ onLeadAdded }: { onLeadAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [enrichmentStatus, setEnrichmentStatus] = useState<EnrichmentStatus>({});
-  const [state, formAction, isPending] = useActionState(handleLeadEnrichment, null);
+  const [state, formAction, isPending] = useActionState(handleLeadEnrichment, { success: false, error: null });
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',

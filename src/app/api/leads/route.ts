@@ -7,6 +7,17 @@ import { cookies } from 'next/headers';
  */
 export async function GET(request: NextRequest) {
   try {
+    // Get the user ID from cookie
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     // Get the status filter from query params if present
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as any;
@@ -29,13 +40,24 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Get the user ID from cookie
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     // Parse the request body
-    const { leadData, userId } = await request.json();
+    const leadData = await request.json();
     
     // Validate the request
-    if (!leadData || !userId) {
+    if (!leadData) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing lead data' },
         { status: 400 }
       );
     }

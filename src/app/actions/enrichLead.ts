@@ -6,7 +6,12 @@ import { saveLead } from '@/lib/supabase/leads';
 import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 
-export async function handleLeadEnrichment(prevState: any, formData: FormData) {
+interface EnrichmentState {
+  success?: boolean;
+  error?: string | null;
+}
+
+export async function handleLeadEnrichment(prevState: EnrichmentState, formData: FormData) {
   const supabase = await createClient();
   
   try {

@@ -4,6 +4,30 @@ import { LeadSearchFilters, LeadSearchResults } from '@/services/leadGeneration/
 import leadGenerationRegistry from '@/services/leadGeneration/serviceRegistry';
 
 /**
+ * Define a type for lead data
+ */
+interface LeadData {
+  id?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  position?: string;
+  company?: string;
+  domain?: string;
+  linkedin_url?: string;
+  company_data?: {
+    name?: string;
+    industry?: string;
+    size?: string;
+    location?: {
+      country?: string;
+      locality?: string;
+    };
+  };
+  [key: string]: unknown;
+}
+
+/**
  * Server action to search for leads using multiple services
  */
 export async function searchLeads(
@@ -72,7 +96,7 @@ export async function verifyEmail(email: string) {
 /**
  * Enrich a lead with additional data
  */
-export async function enrichLead(lead: any) {
+export async function enrichLead(lead: LeadData) {
   try {
     return await leadGenerationRegistry.enrichLead(lead);
   } catch (error) {

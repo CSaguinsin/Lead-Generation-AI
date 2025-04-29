@@ -1,10 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  ArrowUpRight,
-  BarChart3,
   ChevronDown,
   Download,
   Filter,
@@ -16,31 +14,15 @@ import {
   Users,
   ExternalLink,
   Briefcase,
-  TrendingUp,
   Calendar,
   CheckCircle2,
   AlertCircle,
   ChevronRight,
   ArrowRight,
   Inbox,
-  Settings,
-  PieChart,
-  LineChart,
-  BarChart,
-  Activity,
-  Layers,
   Shield,
   Phone,
-  Sparkles,
   Target,
-  Zap,
-  Building2,
-  MapPin,
-  UserCheck,
-  Clock,
-  Wallet,
-  ArrowUpCircle,
-  ArrowDownCircle,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -58,19 +40,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AddLeadModal } from "@/app/components/dashboard/AddLeadModal"
 import { fetchLeads, fetchLeadStats } from "@/app/actions/getLeads"
-import { Lead } from "@/app/types/lead"
+import { Lead, LeadStatus } from "@/app/types/lead"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Progress } from "@/components/ui/progress"
 import { LeadDetailsSidebar } from "@/app/components/dashboard/LeadDetailsSidebar"
 
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'all' | 'verified' | 'unverified'>('all')
+  const [activeTab, setActiveTab] = useState<LeadStatus>(LeadStatus.All)
   const [leads, setLeads] = useState<Lead[]>([])
   const [stats, setStats] = useState({
     totalLeads: 0,
@@ -83,48 +64,54 @@ export default function DashboardPage() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showDetailView, setShowDetailView] = useState(false)
   const [activeTimeframe, setActiveTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('week')
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  const loadLeads = async (filter?: 'verified' | 'unverified') => {
+  const loadLeads = useCallback(async (filter?: LeadStatus) => {
     setIsLoading(true)
     try {
+      console.log("Fetching leads...");
       const fetchedLeads = await fetchLeads(filter);
+      console.log("Fetched leads:", fetchedLeads);
       setLeads(fetchedLeads);
     } catch (error) {
       console.error("Error loading leads:", error);
     } finally {
       setIsLoading(false)
     }
-  }
+  }, []);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const result = await fetchLeadStats();
       if (result.success) {
         setStats(result.data);
+      } else {
+        console.error("Error loading stats: Failed to fetch stats");
       }
     } catch (error) {
       console.error("Error loading stats:", error);
     }
-  }
+  }, []);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     setIsLoading(true)
     await Promise.all([
-      loadLeads(activeTab === 'all' ? undefined : activeTab),
+      loadLeads(activeTab === LeadStatus.All ? undefined : activeTab),
       loadStats()
     ]);
     setIsLoading(false)
-  }
+  }, [loadLeads, loadStats, activeTab]);
 
   const handleTabChange = (value: string) => {
-    const tabValue = value as 'all' | 'verified' | 'unverified';
+    const tabValue = value as unknown as LeadStatus;
     setActiveTab(tabValue);
-    loadLeads(tabValue === 'all' ? undefined : tabValue);
+    loadLeads(tabValue === LeadStatus.All ? undefined : tabValue);
   }
 
-  const handleLeadAdded = () => {
-    refreshData();
-  };
+  const handleLeadAdded = useCallback(() => {
+    console.log("Lead added, refreshing data...");
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   const handleEmailClick = (email: string) => {
     window.open(`mailto:${email}`, "_blank");
@@ -135,22 +122,21 @@ export default function DashboardPage() {
     setShowDetailView(true);
   };
 
-  const filteredLeads = leads.filter(lead => {
+  const filteredLeads = leads ? leads.filter(lead => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
-      `${lead.first_name} ${lead.last_name}`.toLowerCase().includes(searchLower) ||
-      lead.email.toLowerCase().includes(searchLower) ||
-      lead.company.toLowerCase().includes(searchLower)
+      `${lead.first_name || ''} ${lead.last_name || ''}`.toLowerCase().includes(searchLower) ||
+      (lead.email || '').toLowerCase().includes(searchLower) ||
+      (lead.company || '').toLowerCase().includes(searchLower)
     );
-  });
+  }) : [];
 
-  // Load data on initial render
   useEffect(() => {
+    console.log("Refresh effect triggered");
     refreshData();
-  }, []);
+  }, [refreshTrigger]);
 
-  // Format date function without date-fns dependency
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     try {
@@ -160,12 +146,11 @@ export default function DashboardPage() {
         month: 'short', 
         day: 'numeric' 
       }).format(date);
-    } catch (error) {
+    } catch {
       return 'Invalid date';
     }
   }
 
-  // Calculate percentage for progress bar
   const calculatePercentage = () => {
     if (stats.totalLeads === 0) return 0;
     return Math.round((stats.verifiedLeads / stats.totalLeads) * 100);
@@ -173,7 +158,6 @@ export default function DashboardPage() {
 
   const verificationPercentage = calculatePercentage();
 
-  // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -199,7 +183,6 @@ export default function DashboardPage() {
     visible: { opacity: 1, transition: { duration: 0.5 } }
   };
 
-  // Dashboard welcome section
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -389,7 +372,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {leads.length === 0 ? (
+                  {leads && leads.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-[240px]">
                       <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center mb-4">
                         <Inbox className="h-6 w-6 text-orange-600" />
@@ -406,7 +389,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       <div className="space-y-2">
-                        {leads.slice(0, 5).map((lead, index) => (
+                        {leads && leads.slice(0, 5).map((lead, index) => (
                           <div 
                             key={lead.id || index} 
                             className="flex items-center justify-between p-3 rounded-lg hover:bg-orange-50 transition-colors cursor-pointer"
@@ -420,10 +403,10 @@ export default function DashboardPage() {
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-                                <div className="font-medium text-gray-900">{`${lead.first_name} ${lead.last_name}`}</div>
+                                <div className="font-medium text-gray-900">{`${lead.first_name || ''} ${lead.last_name || ''}`}</div>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <Mail className="h-3 w-3" />
-                                  {newFunction(lead)}
+                                  <span className="truncate max-w-[160px]">{lead.email || 'No email'}</span>
                                 </div>
                               </div>
                             </div>
@@ -442,7 +425,7 @@ export default function DashboardPage() {
                                   ) : (
                                     <AlertCircle className="h-3.5 w-3.5" />
                                   )}
-                                  {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                                  {lead.status ? (lead.status.charAt(0).toUpperCase() + lead.status.slice(1)) : 'Unknown'}
                                 </span>
                               </Badge>
                               <Button 
@@ -645,15 +628,24 @@ export default function DashboardPage() {
               <h2 className="text-xl font-semibold text-gray-900">Lead Management</h2>
               <p className="text-sm text-muted-foreground">View, filter, and manage your leads</p>
             </div>
-            <Tabs defaultValue="all" onValueChange={handleTabChange} className="w-full sm:w-auto">
+            <Tabs defaultValue={LeadStatus.All} onValueChange={handleTabChange} className="w-full sm:w-auto">
               <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-10 rounded-lg p-1 bg-orange-50/50 border border-orange-100">
-                <TabsTrigger value="all" className="rounded-md text-sm px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
+                <TabsTrigger
+                  value={LeadStatus.All}
+                  className={activeTab === LeadStatus.All ? "bg-white text-orange-600" : ""}
+                >
                   All Leads
                 </TabsTrigger>
-                <TabsTrigger value="verified" className="rounded-md text-sm px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
+                <TabsTrigger
+                  value={LeadStatus.Verified}
+                  className={activeTab === LeadStatus.Verified ? "bg-white text-orange-600" : ""}
+                >
                   Verified
                 </TabsTrigger>
-                <TabsTrigger value="unverified" className="rounded-md text-sm px-4 py-2 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm">
+                <TabsTrigger
+                  value={LeadStatus.Unverified}
+                  className={activeTab === LeadStatus.Unverified ? "bg-white text-orange-600" : ""}
+                >
                   Unverified
                 </TabsTrigger>
               </TabsList>
@@ -669,8 +661,8 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <CardTitle className="text-lg font-semibold">
-                      {activeTab === 'all' ? 'All Leads' : 
-                       activeTab === 'verified' ? 'Verified Leads' : 'Unverified Leads'}
+                      {activeTab === LeadStatus.All ? 'All Leads' : 
+                       activeTab === LeadStatus.Verified ? 'Verified Leads' : 'Unverified Leads'}
                     </CardTitle>
                     <CardDescription>
                       {filteredLeads.length} {filteredLeads.length === 1 ? 'lead' : 'leads'} found
@@ -756,11 +748,9 @@ export default function DashboardPage() {
                               </div>
                               <h3 className="text-lg font-medium mb-1">No leads found</h3>
                               <p className="text-muted-foreground mb-4">
-                                {activeTab === 'all' 
-                                  ? "You don't have any leads yet." 
-                                  : `No ${activeTab} leads available.`}
+                                You don&apos;t have any leads yet. Let&apos;s add some!
                               </p>
-                              {activeTab === 'all' && (
+                              {activeTab === LeadStatus.All && (
                                 <Button 
                                   onClick={() => document.querySelector<HTMLButtonElement>('[data-add-lead]')?.click()}
                                   className="bg-orange-600 hover:bg-orange-700 text-white gap-2"
@@ -792,7 +782,7 @@ export default function DashboardPage() {
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
-                                  <div className="font-medium text-gray-900">{`${lead.first_name} ${lead.last_name}`}</div>
+                                  <div className="font-medium text-gray-900">{`${lead.first_name || ''} ${lead.last_name || ''}`}</div>
                                   {lead.position && (
                                     <div className="text-xs text-muted-foreground">{lead.position}</div>
                                   )}
@@ -810,7 +800,7 @@ export default function DashboardPage() {
                                   className="inline-flex items-center gap-1.5 text-orange-600 hover:text-orange-700 transition-colors group/email"
                                 >
                                   <Mail className="h-4 w-4" />
-                                  <span className="truncate max-w-[160px]">{lead.email}</span>
+                                  <span className="truncate max-w-[160px]">{lead.email || 'No email'}</span>
                                   <div className={`absolute -top-10 left-0 bg-white text-gray-900 shadow-md rounded-md px-3 py-1.5 text-xs transition-opacity ${
                                     showEmailTooltip === (lead.id || `${index}`) ? "opacity-100" : "opacity-0 pointer-events-none"
                                   }`}>
@@ -836,7 +826,7 @@ export default function DashboardPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
-                                <span>{lead.company}</span>
+                                <span>{lead.company || 'No company'}</span>
                                 {lead.linkedin_url && (
                                   <a 
                                     href={lead.linkedin_url} 
@@ -864,7 +854,7 @@ export default function DashboardPage() {
                                   ) : (
                                     <AlertCircle className="h-3.5 w-3.5" />
                                   )}
-                                  {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                                  {lead.status ? (lead.status.charAt(0).toUpperCase() + lead.status.slice(1)) : 'Unknown'}
                                 </span>
                               </Badge>
                               <Button 

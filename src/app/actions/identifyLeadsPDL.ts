@@ -13,6 +13,57 @@ interface SearchFilters {
   jobLevel?: string;
 }
 
+// Define types for PDL API parameters and responses
+interface PDLIdentifyParams {
+  include_fields: string;
+  pretty: boolean;
+  title?: string;
+  company?: string;
+  location?: string;
+  industry?: string;
+  size?: string;
+  job_title?: string;
+  job_company_name?: string;
+  job_company_industry?: string;
+  location_country?: string;
+  location_locality?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  linkedin_url?: string;
+  [key: string]: string | boolean | undefined;
+}
+
+interface PDLIdentifyResponse {
+  id?: string;
+  name?: {
+    first?: string;
+    last?: string;
+    middle?: string;
+    full?: string;
+  };
+  emails?: Array<{
+    address: string;
+    type?: string;
+  }>;
+  phone_numbers?: string[];
+  profiles?: {
+    linkedin?: {
+      url?: string;
+    };
+    [key: string]: any;
+  };
+  job_title?: string;
+  job_company_name?: string;
+  job_company_industry?: string;
+  location_name?: string;
+  location_country?: string;
+  location_locality?: string;
+  [key: string]: any;
+}
+
 /**
  * Search for leads using PDL's Person Identify API to ensure phone numbers are included
  * This is a separate implementation from searchLeadsPDL that uses the Person Identify API
@@ -45,7 +96,7 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
     for (const person of resultsToProcess) {
       try {
         // Prepare parameters for Person Identify API
-        const identifyParams: Record<string, any> = {
+        const identifyParams: PDLIdentifyParams = {
           include_fields: 'emails,phone_numbers,profiles,location_name,job_title,job_company_name',
           pretty: true
         };
@@ -127,7 +178,7 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
 
         if (response.data) {
           // Merge search result data with identify data
-          const identifyData = response.data;
+          const identifyData: PDLIdentifyResponse = response.data;
           
           // Verify that the identified person matches our original search criteria
           let matchesSearchCriteria = true;
@@ -152,7 +203,7 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
               // Preserve original search data if identify doesn't have it
               job_title: identifyData.job_title || person.job_title,
               job_company_name: identifyData.job_company_name || person.job_company_name,
-              linkedin_url: identifyData.linkedin_url || person.linkedin_url
+              linkedin_url: identifyData.profiles?.linkedin?.url || identifyData.linkedin_url || person.linkedin_url
             }));
           } else {
             console.log('Skipping result that does not match search criteria');
@@ -192,56 +243,66 @@ export async function identifyLeadsPDL(filters: SearchFilters) {
 /**
  * Format the PDL Identify API response into our lead format
  */
-function formatIdentifyResponse(identifyData: any): Lead | null {
+function formatIdentifyResponse(identifyData: PDLIdentifyResponse): Lead | null {
   try {
     if (!identifyData) return null;
 
     // Extract primary email
     let primaryEmail = '';
     if (identifyData.emails && identifyData.emails.length > 0) {
-      primaryEmail = identifyData.emails[0].address || identifyData.emails[0];
+      // Handle email being either a string or an object with address property
+      primaryEmail = typeof identifyData.emails[0] === 'string' 
+        ? identifyData.emails[0] 
+        : identifyData.emails[0].address;
     }
 
     // Extract primary phone number
     let primaryPhone = '';
-    if (identifyData.phones && identifyData.phones.length > 0) {
-      primaryPhone = identifyData.phones[0].number;
-    } else if (identifyData.phone_numbers && identifyData.phone_numbers.length > 0) {
+    if (identifyData.phone_numbers && identifyData.phone_numbers.length > 0) {
       primaryPhone = identifyData.phone_numbers[0];
     }
 
     // Format phone number if needed
     if (primaryPhone) {
+      // Keep the + sign for international format if it exists
       if (!primaryPhone.startsWith('+')) {
+        // For US numbers, ensure proper formatting
         const digits = primaryPhone.replace(/\D/g, '');
         if (digits.length === 10) {
           primaryPhone = `(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6)}`;
-        } else if (digits.length === 11 && digits.startsWith('1')) {
-          primaryPhone = `+1 (${digits.substring(1, 4)}) ${digits.substring(4, 7)}-${digits.substring(7)}`;
         }
       }
     }
 
     // Create a standardized lead object
     return {
-      first_name: identifyData.first_name || '',
-      last_name: identifyData.last_name || '',
+      first_name: identifyData.name?.first || '',
+      last_name: identifyData.name?.last || '',
       email: primaryEmail,
-      phone: primaryPhone,
       position: identifyData.job_title || '',
       company: identifyData.job_company_name || '',
-      linkedin_url: identifyData.linkedin_url || '',
-      location: identifyData.location_name || 
-               (identifyData.location_country ? 
-                 `${identifyData.location_locality || ''}, ${identifyData.location_country}` : 
-                 ''),
-      source: 'pdl_identify',
-      status: LeadStatus.New,
-      // Include additional data from identify response
-      ...identifyData
+      domain: '', // PDL doesn't always provide domain
+      status: primaryEmail ? LeadStatus.Verified : LeadStatus.Unverified,
+      linkedin_url: identifyData.profiles?.linkedin?.url || '',
+      company_data: {
+        name: identifyData.job_company_name || '',
+        industry: identifyData.job_company_industry || '',
+        location: {
+          country: identifyData.location_country || '',
+          locality: identifyData.location_locality || ''
+        }
+      },
+      // Add phone_number to the lead data for display
+      phone_number: primaryPhone,
+      // Include profile data if available
+      profile_data: {
+        summary: '',
+        experiences: [],
+        education: []
+      }
     };
   } catch (error) {
-    console.error('Error formatting identify response:', error);
+    console.error('Error formatting PDL identify response:', error);
     return null;
   }
 }

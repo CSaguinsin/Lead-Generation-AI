@@ -105,8 +105,7 @@ export class LeadService {
           degree: string;
         }>;
       };
-    },
-    userId: string
+    }
   ): Promise<Lead> {
     try {
       // Create a simple fetch request to a new API endpoint we'll create
@@ -115,11 +114,12 @@ export class LeadService {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ leadData, userId }),
+        body: JSON.stringify(leadData),
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to save lead: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to save lead: ${response.statusText}`);
       }
       
       return await response.json();

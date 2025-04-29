@@ -1,8 +1,29 @@
 'use server';
 
-import { generatePossibleEmails, companyNameToDomain } from '@/utils/emailUtils';
-import { Lead } from '@/app/types/lead';
 import leadGenerationRegistry from '@/services/leadGeneration/serviceRegistry';
+
+/**
+ * Define types for our lead data structure
+ */
+interface LeadData {
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  name?: {
+    first?: string;
+    last?: string;
+  };
+  company?: string;
+  job_company_name?: string;
+  domain?: string;
+  email_quality?: {
+    guessed?: boolean;
+    verified?: boolean;
+    confidence?: number;
+    deliverable?: boolean;
+  };
+  [key: string]: unknown;
+}
 
 /**
  * Generate a simple email guess based on first name, last name and company
@@ -32,7 +53,7 @@ function generateSimpleEmailGuess(firstName: string, lastName: string, company: 
 /**
  * Enhance lead data with email guessing when no email is available
  */
-export async function guessEmailForLead(lead: any): Promise<{ 
+export async function guessEmailForLead(lead: LeadData): Promise<{ 
   email: string; 
   confidence: number;
   verified: boolean;
@@ -130,7 +151,7 @@ export async function verifyEmail(email: string): Promise<{
 /**
  * Process a batch of leads to add or verify emails
  */
-export async function enhanceLeadsWithEmails(leads: any[]): Promise<any[]> {
+export async function enhanceLeadsWithEmails(leads: LeadData[]): Promise<LeadData[]> {
   if (!leads || !Array.isArray(leads) || leads.length === 0) {
     return [];
   }

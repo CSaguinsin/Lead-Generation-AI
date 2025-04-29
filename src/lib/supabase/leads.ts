@@ -2,6 +2,7 @@
 import { createClient as createClientBrowser } from "@/utils/supabase/client";
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { Lead, LeadStatus } from "@/app/types/lead";
+import { cookies } from "next/headers";
 
 export async function saveLead(
   enrichedData: {
@@ -156,13 +157,22 @@ export async function getLeads(filter?: LeadStatus) {
   const supabase = await createServerClient();
   
   try {
+    // Get the user ID from cookie
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value;
+    
+    if (!userId) {
+      return [];
+    }
+    
     let query = supabase
       .from('leads')
       .select('*')
+      .eq('created_by', userId)
       .order('created_at', { ascending: false });
     
-    // Apply filter if provided
-    if (filter) {
+    // Apply filter if provided and not 'all'
+    if (filter && filter !== LeadStatus.All) {
       query = query.eq('status', filter);
     }
     
@@ -185,10 +195,24 @@ export async function getLeadStats() {
   const supabase = await createServerClient();
   
   try {
+    // Get the user ID from cookie
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('user_id')?.value;
+    
+    if (!userId) {
+      return {
+        totalLeads: 0,
+        verifiedLeads: 0,
+        conversionRate: '0%',
+        activeCampaigns: 0
+      };
+    }
+    
     // Get total leads count
     const { count: totalLeadsCount, error: totalError } = await supabase
       .from('leads')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', userId);
       
     if (totalError) throw totalError;
     
@@ -196,7 +220,8 @@ export async function getLeadStats() {
     const { count: verifiedLeadsCount, error: verifiedError } = await supabase
       .from('leads')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'verified');
+      .eq('status', 'verified')
+      .eq('created_by', userId);
       
     if (verifiedError) throw verifiedError;
     
@@ -214,7 +239,7 @@ export async function getLeadStats() {
       activeCampaigns: 0 // Placeholder for future implementation
     };
   } catch (error) {
-    console.error('Failed to fetch lead statistics:', error);
+    console.error('Failed to fetch lead stats:', error);
     return {
       totalLeads: 0,
       verifiedLeads: 0,

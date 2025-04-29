@@ -12,41 +12,24 @@ export type UserProfile = {
 export async function getCurrentUser(): Promise<UserProfile | null> {
   const supabase = await createClient();
   
-  // Get the current user from the auth session
-  const { data: { session } } = await supabase.auth.getSession();
+  // Get the user ID from the cookie instead of using Supabase Auth
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('user_id')?.value;
   
-  if (!session || !session.user) {
+  if (!userId) {
     return null;
   }
   
-  // Fetch the user's profile from the user_clients table
-  // In our simplified system, we're using the user's ID directly
+  // Fetch the user's profile from the user_clients table using the cookie user ID
   const { data, error } = await supabase
     .from('user_clients')
     .select('id, full_name, email')
-    .eq('id', session.user.id)
+    .eq('id', userId)
     .single();
   
   if (error || !data) {
     console.error('Error fetching user profile:', error);
-    
-    // Try fetching by auth_user_id as fallback (for backward compatibility)
-    const { data: fallbackData, error: fallbackError } = await supabase
-      .from('user_clients')
-      .select('id, full_name, email')
-      .eq('auth_user_id', session.user.id)
-      .single();
-      
-    if (fallbackError || !fallbackData) {
-      console.error('Error fetching user profile (fallback):', fallbackError);
-      return null;
-    }
-    
-    return {
-      id: fallbackData.id,
-      full_name: fallbackData.full_name,
-      email: fallbackData.email
-    };
+    return null;
   }
   
   return {

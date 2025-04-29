@@ -31,6 +31,7 @@ export interface ProfileData {
 
 // Define the LeadStatus enum
 export enum LeadStatus {
+  All = 'all',
   Verified = 'verified',
   Unverified = 'unverified',
   Pending = 'pending',
