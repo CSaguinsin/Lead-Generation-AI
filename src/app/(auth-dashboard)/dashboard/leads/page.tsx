@@ -15,6 +15,7 @@ import { LeadService } from "@/lib/leadService";
 import { LeadsTabs } from "@/app/components/dashboard/tabs/LeadsTabs"
 import { SearchFiltersCard } from "@/app/components/dashboard/tabs/SearchFiltersCard"
 import { LeadDetailsSidebar } from "@/app/components/dashboard/LeadDetailsSidebar"
+import { PDLQuotaErrorModal } from "@/app/components/dashboard/PDLQuotaErrorModal"
 
 // Define a type for LeadData to match the one in enhanceEmails.ts
 interface LeadData {
@@ -96,10 +97,11 @@ const leadDataToLead = (leadData: LeadData): Lead => {
 
 export default function Leads() {
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingSavedLeads, setIsLoadingSavedLeads] = useState(false)
   const [isProcessingEmails, setIsProcessingEmails] = useState(false)
+  const [noResultsFound, setNoResultsFound] = useState(false)
   const [leads, setLeads] = useState<Lead[]>([])
   const [searchResults, setSearchResults] = useState<Lead[]>([])
-  const [noResultsFound, setNoResultsFound] = useState(false)
   const [activeServices, setActiveServices] = useState<string[]>(['pdl']) 
   const [availableServices, setAvailableServices] = useState<LeadSource[]>([])
   const [isLoadingServices, setIsLoadingServices] = useState(true)
@@ -128,9 +130,6 @@ export default function Leads() {
   const [enhanceEmailsAutomatically] = useState(true)
   
   // Add a state for loading saved leads
-  const [isLoadingSavedLeads, setIsLoadingSavedLeads] = useState(false)
-
-  // Add state for lead details sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   
@@ -139,6 +138,9 @@ export default function Leads() {
     setSelectedLead(lead)
     setSidebarOpen(true)
   }
+
+  // Add state for PDL quota error modal
+  const [showPDLQuotaErrorModal, setShowPDLQuotaErrorModal] = useState(false)
 
   // Load available services on mount
   useEffect(() => {
@@ -196,11 +198,15 @@ export default function Leads() {
       // If no services are active, default to PDL
       const services = activeServices.length > 0 ? activeServices : ['pdl']
       
+      // Filter out Coresignal due to API issues
+      const filteredServices = services.filter(service => service !== 'coresignal')
+      console.log('Using services for search:', filteredServices)
+      
       // Use our server action to search across multiple services
       const results = await LeadService.searchLeads(
         filterOptions, 
         { 
-          useServices: services,
+          useServices: filteredServices,
           combineResults: false 
         }
       )
@@ -221,6 +227,13 @@ export default function Leads() {
         totalResults: allLeads.length,
         filtersCovered: results.flatMap((r: LeadSearchResults) => r.metadata.filtersCovered)
           .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i) // Remove duplicates
+      }
+      
+      // Check if PDL API quota limit has been reached
+      const pdlResult = results.find(result => result.sourceId === 'pdl');
+      if (pdlResult && pdlResult.metadata.usageLimitReached) {
+        console.warn('PDL API quota limit reached');
+        setShowPDLQuotaErrorModal(true);
       }
       
       // Automatically enhance emails if enabled
@@ -249,9 +262,11 @@ export default function Leads() {
                 email: enhancedData.email || originalLead.email,
                 email_quality: enhancedData.email_quality ? {
                   deliverable: enhancedData.email_quality.deliverable || false,
-                  quality_score: '0',
+                  quality_score: enhancedData.email_quality.confidence?.toString() || '0',
                   is_valid_format: true
-                } : originalLead.email_quality
+                } : originalLead.email_quality,
+                status: enhancedData.email_quality?.deliverable ? LeadStatus.Verified : 
+                        LeadStatus.Unverified
               };
             }
             
@@ -259,7 +274,6 @@ export default function Leads() {
           });
           
           allLeads = enhancedLeads;
-          console.log(`Enhanced ${enhancedLeads.filter(l => l.email).length} leads with emails`);
         } catch (error) {
           console.error("Error enhancing emails:", error);
         } finally {
@@ -269,19 +283,28 @@ export default function Leads() {
       
       setSearchResults(allLeads)
       setCurrentSearchMetadata(searchMetadata)
-      
-      // Show toast or message if no results found across all services
-      if (allLeads.length === 0) {
-        setNoResultsFound(true)
-      }
+      setNoResultsFound(allLeads.length === 0)
     } catch (error) {
-      console.error("Error searching leads:", error)
+      console.error("Error searching for leads:", error)
       setNoResultsFound(true)
     } finally {
       setIsLoading(false)
     }
   }, [activeServices, enhanceEmailsAutomatically, filterOptions])
-  
+
+  // Automatically load initial leads when the component mounts
+  useEffect(() => {
+    // Only run this effect after services are loaded
+    if (!isLoadingServices) {
+      // Use default filter options to load initial leads
+      const loadInitialLeads = async () => {
+        await handleSearch();
+      };
+      
+      loadInitialLeads();
+    }
+  }, [isLoadingServices, handleSearch]); // Depend on isLoadingServices to ensure services are loaded first
+
   // Add event listener for search button in SearchFiltersCard
   useEffect(() => {
     const handleSearchEvent = () => {
@@ -466,6 +489,12 @@ export default function Leads() {
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           lead={selectedLead}
+        />
+        
+        {/* PDL Quota Error Modal */}
+        <PDLQuotaErrorModal 
+          isOpen={showPDLQuotaErrorModal}
+          onClose={() => setShowPDLQuotaErrorModal(false)}
         />
       </div>
     </>

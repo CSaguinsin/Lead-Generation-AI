@@ -35,6 +35,8 @@ export interface LeadSearchMetadata {
   filtersCovered: string[];
   error?: string;
   usageLimitReached?: boolean;
+  enriched?: boolean;
+  enrichmentSource?: string;
 }
 
 export interface LeadSearchResults {
@@ -51,6 +53,7 @@ export interface LeadEnrichmentResult {
   enrichedData: any;
   confidence: number; // 0-1 score of match confidence
   fieldsEnriched: string[];
+  error?: string; // Add error property for error handling
 }
 
 /**

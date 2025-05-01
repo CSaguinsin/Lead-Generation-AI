@@ -1,308 +1,213 @@
 'use server';
 
 import axios from 'axios';
-import { Lead, LeadStatus } from '@/app/types/lead';
-import { searchLeadsPDL } from './searchLeadsPDL';
+import { Lead, LeadStatus } from '../types/lead';
 
-interface SearchFilters {
-  title?: string;
-  company?: string;
-  location?: string;
-  industry?: string;
-  companySize?: string;
-  jobLevel?: string;
-}
-
-// Define types for PDL API parameters and responses
-interface PDLIdentifyParams {
-  include_fields: string;
-  pretty: boolean;
-  title?: string;
-  company?: string;
-  location?: string;
-  industry?: string;
-  size?: string;
-  job_title?: string;
-  job_company_name?: string;
-  job_company_industry?: string;
-  location_country?: string;
-  location_locality?: string;
-  name?: string;
+// Define the PDL Enrich parameters type
+interface PDLEnrichParams {
+  email?: string;
+  profile?: string;
   first_name?: string;
   last_name?: string;
-  email?: string;
-  phone?: string;
-  linkedin_url?: string;
-  [key: string]: string | boolean | undefined;
-}
-
-interface PDLIdentifyResponse {
-  id?: string;
-  name?: {
-    first?: string;
-    last?: string;
-    middle?: string;
-    full?: string;
-  };
-  emails?: Array<{
-    address: string;
-    type?: string;
-  }>;
-  phone_numbers?: string[];
-  profiles?: {
-    linkedin?: {
-      url?: string;
-    };
-    [key: string]: any;
-  };
-  job_title?: string;
-  job_company_name?: string;
-  job_company_industry?: string;
-  location_name?: string;
-  location_country?: string;
-  location_locality?: string;
-  [key: string]: any;
+  company?: string;
+  location?: string;
+  pretty?: boolean;
 }
 
 /**
- * Search for leads using PDL's Person Identify API to ensure phone numbers are included
- * This is a separate implementation from searchLeadsPDL that uses the Person Identify API
- * instead of the Person Search API to get better phone number data
+ * Enriches leads with detailed information using PDL's Person Enrich API
+ * This is the proper API to use for getting detailed contact information including phone numbers
+ * 
+ * @param leads - Array of leads to enrich with PDL
+ * @returns Array of enriched leads
  */
-export async function identifyLeadsPDL(filters: SearchFilters) {
+export async function enrichLeadsPDL(leads: Lead[]): Promise<Lead[]> {
+  if (!leads || leads.length === 0) {
+    console.log('No leads to enrich');
+    return [];
+  }
+  
+  console.log(`Enriching ${leads.length} leads with PDL Person Enrich API`);
+  
+  // Limit the number of leads to enrich to avoid excessive API usage
+  const MAX_ENRICH_CALLS = 10;
+  const leadsToEnrich = leads.slice(0, MAX_ENRICH_CALLS);
+  
   try {
-    // Ensure PDL API key exists
     const apiKey = process.env.PDL_API_KEY;
     if (!apiKey) {
-      throw new Error('PDL API key is missing');
-    }
-
-    // First, use the search API to get a list of potential leads
-    const searchResults = await searchLeadsPDL(filters);
-    
-    if (!searchResults || searchResults.length === 0) {
-      return [];
+      console.error('PDL API key is missing');
+      return leads;
     }
     
-    console.log(`Found ${searchResults.length} initial results, enhancing with Identify API...`);
-    
-    // Now use the Identify API to get detailed information including phone numbers
-    // Process up to 10 results to avoid rate limiting
-    const resultsToProcess = searchResults.slice(0, 10);
-    
-    // Process each result with the Identify API
-    // Use sequential processing with delay to avoid rate limiting
-    const enhancedResults = [];
-    for (const person of resultsToProcess) {
+    // Process leads in parallel with Promise.all
+    const enrichedLeadsPromises = leadsToEnrich.map(async (lead) => {
       try {
-        // Prepare parameters for Person Identify API
-        const identifyParams: PDLIdentifyParams = {
-          include_fields: 'emails,phone_numbers,profiles,location_name,job_title,job_company_name',
-          pretty: true
+        // Create the base parameters for the Enrich API
+        const params: PDLEnrichParams = {
+          pretty: false
         };
-
-        // IMPORTANT FIX: First add the original search filters to ensure we're respecting the search criteria
-        if (filters.title && filters.title !== 'any') {
-          identifyParams.title = filters.title;
+        
+        // Add as many identifying parameters as possible to get the best match
+        if (lead.email) {
+          params.email = lead.email;
         }
         
-        if (filters.company && filters.company !== 'any') {
-          identifyParams.company = filters.company;
+        if (lead.first_name && lead.last_name) {
+          params.first_name = lead.first_name;
+          params.last_name = lead.last_name;
         }
         
-        if (filters.location && filters.location !== 'any') {
-          identifyParams.location = filters.location;
+        if (lead.company) {
+          params.company = lead.company;
         }
         
-        if (filters.industry && filters.industry !== 'all') {
-          // Industry isn't directly supported by Identify API, but we'll keep the filter consistent
-          // by ensuring we only use company matches that would match this industry
-          if (person.job_company_industry !== filters.industry) {
-            console.log('Skipping person due to industry mismatch:', person.name);
-            continue;
+        if (lead.linkedin_url) {
+          params.profile = lead.linkedin_url;
+        }
+        
+        // Make the API request
+        const response = await axios.get('https://api.peopledatalabs.com/v5/person/enrich', {
+          params,
+          headers: {
+            'X-Api-Key': apiKey,
+            'User-Agent': 'LeadGenerationAI/1.0',
+            'Accept': 'application/json'
           }
+        });
+        
+        if (response.data && response.data.data) {
+          // Format the enriched data
+          const enrichedLead = formatEnrichResponse(response.data.data, lead);
+          return enrichedLead;
         }
-
-        // Now add identifying information from search result as additional context
-        // but don't override the original filters
-        if (person.first_name && person.last_name) {
-          identifyParams.first_name = person.first_name;
-          identifyParams.last_name = person.last_name;
-        } else if (person.name) {
-          const nameParts = person.name.split(' ');
-          if (nameParts.length >= 2) {
-            identifyParams.first_name = nameParts[0];
-            identifyParams.last_name = nameParts[nameParts.length - 1];
-          }
-        }
-
-        // Only add company from person if we don't already have a company filter
-        if (!identifyParams.company && person.job_company_name) {
-          identifyParams.company = person.job_company_name;
-        }
-
-        // Only add title from person if we don't already have a title filter
-        if (!identifyParams.title && person.job_title) {
-          identifyParams.title = person.job_title;
-        }
-
-        if (person.linkedin_url) {
-          identifyParams.profile = person.linkedin_url;
-        }
-
-        // Ensure we have at least one parameter to identify the person
-        if (!identifyParams.first_name && !identifyParams.profile && !identifyParams.email && 
-            !identifyParams.company && !identifyParams.title && !identifyParams.location) {
-          console.log('Insufficient data to identify person:', person);
-          enhancedResults.push(formatIdentifyResponse(person));
-          continue;
-        }
-
-        console.log('Identify API parameters:', identifyParams);
-
-        // Add delay between requests to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // Call PDL Person Identify API
-        const response = await axios.get(
-          'https://api.peopledatalabs.com/v5/person/identify',
-          {
-            params: identifyParams,
-            headers: {
-              'X-Api-Key': apiKey,
-              'Accept-Encoding': 'gzip'
-            },
-            timeout: 10000
-          }
-        );
-
-        if (response.data) {
-          // Merge search result data with identify data
-          const identifyData: PDLIdentifyResponse = response.data;
-          
-          // Verify that the identified person matches our original search criteria
-          let matchesSearchCriteria = true;
-          
-          if (filters.title && filters.title !== 'any' && 
-              identifyData.job_title && !identifyData.job_title.toLowerCase().includes(filters.title.toLowerCase())) {
-            console.log('Identified person does not match title criteria:', identifyData.job_title);
-            matchesSearchCriteria = false;
-          }
-          
-          if (filters.company && filters.company !== 'any' && 
-              identifyData.job_company_name && !identifyData.job_company_name.toLowerCase().includes(filters.company.toLowerCase())) {
-            console.log('Identified person does not match company criteria:', identifyData.job_company_name);
-            matchesSearchCriteria = false;
-          }
-          
-          // Only add the result if it matches our search criteria
-          if (matchesSearchCriteria) {
-            enhancedResults.push(formatIdentifyResponse({
-              ...person,
-              ...identifyData,
-              // Preserve original search data if identify doesn't have it
-              job_title: identifyData.job_title || person.job_title,
-              job_company_name: identifyData.job_company_name || person.job_company_name,
-              linkedin_url: identifyData.profiles?.linkedin?.url || identifyData.linkedin_url || person.linkedin_url
-            }));
-          } else {
-            console.log('Skipping result that does not match search criteria');
-          }
-        } else {
-          // If identify fails, format the original search result
-          enhancedResults.push(formatIdentifyResponse(person));
-        }
+        
+        return lead; // Return original lead if no enrichment data
       } catch (error) {
-        console.error('Error enhancing lead with Identify API:', error);
-        // On error, return the original search result formatted
-        enhancedResults.push(formatIdentifyResponse(person));
-        
-        // If we hit a rate limit, add a longer delay
-        if (axios.isAxiosError(error) && error.response?.status === 429) {
-          console.log('Rate limit hit, adding delay...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+        console.error('Error enriching lead with PDL:', error);
+        return lead; // Return original lead on error
       }
-    }
-
-    // Filter out any null results
-    const validResults = enhancedResults.filter(result => result !== null);
+    });
     
-    console.log(`Successfully enhanced ${validResults.length} leads with additional data`);
-    return validResults;
+    // Wait for all enrichment calls to complete
+    const enrichedLeads = await Promise.all(enrichedLeadsPromises);
     
+    // Merge enriched leads with the original leads array
+    const resultLeads = [...leads];
+    enrichedLeads.forEach((enrichedLead, index) => {
+      resultLeads[index] = enrichedLead;
+    });
+    
+    console.log(`Successfully enriched ${enrichedLeads.filter(l => l.phone_number).length} leads with phone numbers`);
+    return resultLeads;
   } catch (error) {
-    console.error('Error in identifyLeadsPDL:', error);
-    if (axios.isAxiosError(error)) {
-      console.error('API Response:', error.response?.data);
-    }
-    throw new Error('Failed to identify leads. ' + (axios.isAxiosError(error) ? error.response?.data?.error?.message || '' : ''));
+    console.error('Error in enrichLeadsPDL:', error);
+    return leads; // Return original leads on error
   }
 }
 
 /**
- * Format the PDL Identify API response into our lead format
+ * Format the PDL Enrich API response into our lead format
+ * 
+ * @param data - PDL API response data
+ * @param originalLead - Original lead to merge with enriched data
+ * @returns Formatted lead with enriched data
  */
-function formatIdentifyResponse(identifyData: PDLIdentifyResponse): Lead | null {
+function formatEnrichResponse(data: any, originalLead: Lead): Lead {
+  if (!data) return originalLead;
+  
   try {
-    if (!identifyData) return null;
-
-    // Extract primary email
-    let primaryEmail = '';
-    if (identifyData.emails && identifyData.emails.length > 0) {
-      // Handle email being either a string or an object with address property
-      primaryEmail = typeof identifyData.emails[0] === 'string' 
-        ? identifyData.emails[0] 
-        : identifyData.emails[0].address;
+    // Extract phone number (primary focus of enrichment)
+    let phoneNumber = originalLead.phone_number || '';
+    
+    // Check for phone_numbers array first (most common in PDL API)
+    if (data.phone_numbers && Array.isArray(data.phone_numbers)) {
+      if (data.phone_numbers.length > 0) {
+        if (typeof data.phone_numbers[0] === 'object' && data.phone_numbers[0] !== null) {
+          // Handle case where phone is an object
+          phoneNumber = data.phone_numbers[0].number || data.phone_numbers[0].value || phoneNumber;
+        } else {
+          phoneNumber = String(data.phone_numbers[0]);
+        }
+      }
+    } 
+    // Then check for other phone fields
+    else if (data.phones && Array.isArray(data.phones) && data.phones.length > 0) {
+      if (typeof data.phones[0] === 'object' && data.phones[0] !== null) {
+        phoneNumber = data.phones[0].number || data.phones[0].value || phoneNumber;
+      } else {
+        phoneNumber = String(data.phones[0]);
+      }
+    } 
+    else if (data.mobile_phone) {
+      if (typeof data.mobile_phone === 'object' && data.mobile_phone !== null) {
+        phoneNumber = data.mobile_phone.number || data.mobile_phone.value || phoneNumber;
+      } else {
+        phoneNumber = String(data.mobile_phone);
+      }
     }
-
-    // Extract primary phone number
-    let primaryPhone = '';
-    if (identifyData.phone_numbers && identifyData.phone_numbers.length > 0) {
-      primaryPhone = identifyData.phone_numbers[0];
-    }
-
+    
     // Format phone number if needed
-    if (primaryPhone) {
+    if (phoneNumber && typeof phoneNumber === 'string') {
       // Keep the + sign for international format if it exists
-      if (!primaryPhone.startsWith('+')) {
+      if (!phoneNumber.startsWith('+')) {
         // For US numbers, ensure proper formatting
-        const digits = primaryPhone.replace(/\D/g, '');
+        const digits = phoneNumber.replace(/\D/g, '');
         if (digits.length === 10) {
-          primaryPhone = `(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6)}`;
+          phoneNumber = `(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6)}`;
         }
       }
     }
-
-    // Create a standardized lead object
+    
+    // Get additional profile data if available
+    const profileData = originalLead.profile_data || {
+      summary: '',
+      experiences: [],
+      education: []
+    };
+    
+    // Enrich profile data if available
+    if (data.summary) {
+      profileData.summary = data.summary;
+    }
+    
+    if (data.experience && Array.isArray(data.experience)) {
+      profileData.experiences = data.experience.map((exp: any) => ({
+        company: exp.company || '',
+        title: exp.title || '',
+        duration: exp.start_date && exp.end_date ? `${exp.start_date} - ${exp.end_date}` : ''
+      }));
+    }
+    
+    if (data.education && Array.isArray(data.education)) {
+      profileData.education = data.education.map((edu: any) => ({
+        school: edu.school || '',
+        degree: edu.degree || ''
+      }));
+    }
+    
+    // Create the enriched lead by merging with original lead
     return {
-      first_name: identifyData.name?.first || '',
-      last_name: identifyData.name?.last || '',
-      email: primaryEmail,
-      position: identifyData.job_title || '',
-      company: identifyData.job_company_name || '',
-      domain: '', // PDL doesn't always provide domain
-      status: primaryEmail ? LeadStatus.Verified : LeadStatus.Unverified,
-      linkedin_url: identifyData.profiles?.linkedin?.url || '',
-      company_data: {
-        name: identifyData.job_company_name || '',
-        industry: identifyData.job_company_industry || '',
-        location: {
-          country: identifyData.location_country || '',
-          locality: identifyData.location_locality || ''
-        }
-      },
-      // Add phone_number to the lead data for display
-      phone_number: primaryPhone,
-      // Include profile data if available
-      profile_data: {
-        summary: '',
-        experiences: [],
-        education: []
-      }
+      ...originalLead,
+      phone_number: phoneNumber,
+      profile_data: profileData,
+      // Only update these fields if they're empty in the original lead
+      linkedin_url: originalLead.linkedin_url || data.linkedin_url || '',
+      email: originalLead.email || (data.emails && data.emails.length > 0 ? data.emails[0] : ''),
+      // Mark as verified if we have a phone number
+      status: phoneNumber ? LeadStatus.Verified : originalLead.status
     };
   } catch (error) {
-    console.error('Error formatting PDL identify response:', error);
-    return null;
+    console.error('Error formatting PDL enrich response:', error);
+    return originalLead;
   }
+}
+
+/**
+ * @deprecated Use enrichLeadsPDL instead
+ * This function used the Person Identify API which is not the correct API for lead generation
+ */
+export async function identifyLeadsPDL(filters: any): Promise<Lead[]> {
+  console.warn('identifyLeadsPDL is deprecated. Use enrichLeadsPDL instead.');
+  return [];
 }

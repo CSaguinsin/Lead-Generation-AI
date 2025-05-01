@@ -7,6 +7,7 @@ import {
   LeadSearchMetadata,
   LeadEnrichmentResult
 } from '../types';
+import { getAuthHeaders } from '@/utils/apiTokens';
 
 /**
  * Coresignal API service for lead generation
@@ -47,78 +48,199 @@ class CoresignalService implements LeadGenerationService {
   
   /**
    * Search for leads using Coresignal's Multi-source Employee API
-   * @param filters Search filters
    */
   async search(filters: LeadSearchFilters): Promise<LeadSearchResults> {
     try {
-      // Check if API key exists
+      // Get API key from environment variable
       const apiKey = process.env.CORESIGNAL_API_KEY;
+      
       if (!apiKey) {
         return {
-          sourceId: this.id,
-          sourceName: this.name,
           leads: [],
+          sourceId: 'coresignal',
+          sourceName: 'Coresignal',
           metadata: {
-            error: 'Coresignal API key is missing',
-            filtersCovered: []
+            filtersCovered: [],
+            error: 'Coresignal API key is missing'
           }
         };
       }
       
-      console.log('Using Coresignal Multi-source Employee API for lead search');
-      
-      // Build Elasticsearch DSL query based on filters
-      const esQuery = this.buildElasticsearchQuery(filters);
-      
-      // Call Coresignal search API
-      const searchResults = await this.searchEmployees(esQuery, apiKey);
-      
-      if (!searchResults || searchResults.length === 0) {
-        return {
-          sourceId: this.id,
-          sourceName: this.name,
-          leads: [],
-          metadata: {
-            total: 0,
-            filtersCovered: Object.keys(filters).filter(key => !!filters[key as keyof LeadSearchFilters])
-          }
-        };
-      }
-      
-      console.log(`Found ${searchResults.length} results from Coresignal`);
-      
-      // Process up to 200 results
-      const resultsToProcess = searchResults.slice(0, 200);
-      
-      // Convert Coresignal results to leads
-      const leads = resultsToProcess.map(result => this.formatCoresignalResult(result));
-      
-      // Filter out any null results
-      const validLeads = leads.filter(lead => lead !== null) as Lead[];
-      
-      const metadata: LeadSearchMetadata = {
-        total: searchResults.length,
-        remaining: searchResults.length - resultsToProcess.length,
-        filtersCovered: Object.keys(filters).filter(key => !!filters[key as keyof LeadSearchFilters])
-      };
-      
-      return {
-        sourceId: this.id,
-        sourceName: this.name,
-        leads: validLeads,
-        metadata
-      };
+      // Search for employees using the Coresignal API
+      return this.searchEmployees(filters);
     } catch (error) {
-      console.error('Error in Coresignal search:', error);
+      console.error('Error searching Coresignal:', error);
       return {
-        sourceId: this.id,
-        sourceName: this.name,
         leads: [],
+        sourceId: 'coresignal',
+        sourceName: 'Coresignal',
         metadata: {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          filtersCovered: []
+          filtersCovered: [],
+          error: error instanceof Error ? error.message : 'Unknown error'
         }
       };
+    }
+  }
+  
+  /**
+   * Search for employees using Coresignal's Multi-source Employee API
+   */
+  async searchEmployees(filters: LeadSearchFilters): Promise<LeadSearchResults> {
+    try {
+      // Get API key from environment variable
+      const apiKey = process.env.CORESIGNAL_API_KEY;
+      console.log(`Using Coresignal API key: ${apiKey ? 'Available' : 'Missing'}`);
+      
+      if (!apiKey) {
+        throw new Error('Coresignal API key is missing');
+      }
+      
+      const url = 'https://api.coresignal.com/cdapi/v2/employee_multi_source/search/es_dsl';
+      
+      console.log('Using Coresignal search endpoint:', url);
+      
+      // Create the simplest possible valid query that will return results
+      const requestPayload = {
+        query: {
+          match_all: {}
+        },
+        size: 10
+      };
+      
+      console.log('Coresignal search query:', JSON.stringify(requestPayload, null, 2));
+      
+      // Make the API request - POST for search endpoint
+      const response = await axios.post(url, requestPayload, {
+        headers: {
+          'apikey': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log(`Coresignal API response status: ${response.status}`);
+      
+      // Handle the response - Coresignal returns hits with _source containing employee data
+      if (response.data && response.data.hits && Array.isArray(response.data.hits.hits)) {
+        const employees = response.data.hits.hits.map((hit: any) => hit._source);
+        console.log(`Found ${employees.length} employees from Coresignal`);
+        
+        // Apply filters manually since we're using a simple match_all query
+        const filteredEmployees = employees.filter((employee: Record<string, any>) => this.matchesFilters(employee, filters));
+        console.log(`After filtering: ${filteredEmployees.length} employees match criteria`);
+        
+        // Format the results for our lead format
+        const leads = filteredEmployees.map((employee: Record<string, any>) => this.formatEmployeeToLead(employee));
+        
+        return {
+          leads,
+          sourceId: 'coresignal',
+          sourceName: 'Coresignal',
+          metadata: {
+            filtersCovered: this.getFiltersCovered(filters),
+            total: filteredEmployees.length,
+            error: undefined
+          }
+        };
+      } else {
+        console.error('Unexpected Coresignal API response format:', response.data);
+        return {
+          leads: [],
+          sourceId: 'coresignal',
+          sourceName: 'Coresignal',
+          metadata: {
+            filtersCovered: [],
+            error: 'Unexpected API response format'
+          }
+        };
+      }
+    } catch (error: any) {
+      console.error('Error in searchEmployees:', error);
+      
+      // Log detailed error information if available
+      if (error.response) {
+        console.error('Coresignal API error response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        });
+      }
+      
+      return {
+        leads: [],
+        sourceId: 'coresignal',
+        sourceName: 'Coresignal',
+        metadata: {
+          filtersCovered: [],
+          error: error.message || 'Unknown error'
+        }
+      };
+    }
+  }
+
+  /**
+   * Check if an employee record matches the given filters
+   */
+  private matchesFilters(employee: Record<string, any>, filters: LeadSearchFilters): boolean {
+    // If no filters are provided, return true
+    if (!filters.title && !filters.company && !filters.location && !filters.industry) {
+      return true;
+    }
+
+    // Check title filter
+    if (filters.title && filters.title !== 'any') {
+      const position = employee.position || '';
+      if (!position.toLowerCase().includes(filters.title.toLowerCase())) {
+        return false;
+      }
+    }
+
+    // Check company filter
+    if (filters.company && filters.company !== 'any') {
+      const company = employee.company_name || '';
+      if (!company.toLowerCase().includes(filters.company.toLowerCase())) {
+        return false;
+      }
+    }
+
+    // Check location filter
+    if (filters.location && filters.location !== 'any') {
+      const location = employee.location_name || '';
+      if (!location.toLowerCase().includes(filters.location.toLowerCase())) {
+        return false;
+      }
+    }
+
+    // Check industry filter
+    if (filters.industry && filters.industry !== 'any') {
+      const industry = employee.company_industry || '';
+      if (!industry.toLowerCase().includes(filters.industry.toLowerCase())) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+  
+  /**
+   * Get detailed employee data by ID using Coresignal's Multi-source Employee API
+   */
+  private async getEmployeeById(id: string, apiKey: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `https://api.coresignal.com/cdapi/v2/employee_multi_source/collect/${id}`,
+        {
+          headers: {
+            'apikey': apiKey,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error(`Error getting employee data for ID ${id}:`, error);
+      return null;
     }
   }
   
@@ -128,9 +250,10 @@ class CoresignalService implements LeadGenerationService {
    */
   async enrich(lead: Lead): Promise<LeadEnrichmentResult> {
     try {
-      // Check if API key exists
+      // Get API key from environment variable
       const apiKey = process.env.CORESIGNAL_API_KEY;
       if (!apiKey) {
+        console.error('Coresignal API key is missing');
         return {
           sourceId: this.id,
           sourceName: this.name,
@@ -141,8 +264,8 @@ class CoresignalService implements LeadGenerationService {
         };
       }
       
-      // Skip if no LinkedIn URL or name to identify the person
-      if (!lead.linkedin_url && !lead.first_name && !lead.last_name) {
+      // Skip if we don't have enough data to search
+      if (!lead.first_name || !lead.last_name) {
         return {
           sourceId: this.id,
           sourceName: this.name,
@@ -153,52 +276,40 @@ class CoresignalService implements LeadGenerationService {
         };
       }
       
-      let employeeId;
-      let shorthandName;
+      // Try to find the employee by name
+      const searchQuery = this.buildEmployeeByNameQuery(lead);
       
-      // Extract shorthand name from LinkedIn URL if available
-      if (lead.linkedin_url) {
-        const urlParts = lead.linkedin_url.split('/');
-        shorthandName = urlParts[urlParts.length - 1];
-      }
+      // Make the API request
+      const response = await axios.post(
+        'https://api.coresignal.com/cdapi/v2/employee_multi_source/search/es_dsl',
+        searchQuery,
+        {
+          headers: {
+            'apikey': apiKey,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       
-      // If we have a shorthand name, use the collect by shorthand name endpoint
-      if (shorthandName) {
-        const enrichedData = await this.collectByShorthandName(shorthandName, apiKey);
-        if (enrichedData) {
-          const enrichedFields = this.processEnrichedData(enrichedData);
+      // Handle the response - Coresignal returns an array of IDs
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        // Get the first ID
+        const employeeId = response.data[0];
+        
+        // Get detailed employee data
+        const employeeData = await this.getEmployeeById(employeeId, apiKey);
+        
+        if (employeeData) {
+          // Process the enriched data
+          const enrichedFields = this.processEnrichedData(employeeData);
           return {
             sourceId: this.id,
             sourceName: this.name,
             originalLead: lead,
             enrichedData: enrichedFields,
-            confidence: 0.9,
+            confidence: 0.8,
             fieldsEnriched: Object.keys(enrichedFields)
           };
-        }
-      }
-      
-      // If we don't have a shorthand name but have a name, try to search and then collect
-      if (lead.first_name && lead.last_name) {
-        const searchQuery = this.buildNameSearchQuery(lead);
-        const searchResults = await this.searchEmployees(searchQuery, apiKey);
-        
-        if (searchResults && searchResults.length > 0) {
-          // Use the first result's ID to collect detailed data
-          employeeId = searchResults[0].id;
-          const enrichedData = await this.collectById(employeeId, apiKey);
-          
-          if (enrichedData) {
-            const enrichedFields = this.processEnrichedData(enrichedData);
-            return {
-              sourceId: this.id,
-              sourceName: this.name,
-              originalLead: lead,
-              enrichedData: enrichedFields,
-              confidence: 0.8, // Lower confidence since we're matching by name
-              fieldsEnriched: Object.keys(enrichedFields)
-            };
-          }
         }
       }
       
@@ -242,132 +353,101 @@ class CoresignalService implements LeadGenerationService {
   }
   
   /**
-   * Build Elasticsearch DSL query based on search filters
+   * Build the Elasticsearch DSL query for employee search
    */
-  private buildElasticsearchQuery(filters: LeadSearchFilters): any {
-    const query: any = {
-      bool: {
-        must: []
-      }
-    };
-    
-    // Add job title filter
-    if (filters.title && filters.title !== 'any') {
-      query.bool.must.push({
-        match: { "job_title": filters.title }
-      });
+  buildEmployeeQuery(filters: LeadSearchFilters): any {
+    // According to Coresignal docs, we need to wrap our query in a proper structure
+    // For an empty search (when no filters are provided), use a match_all query
+    if (!filters.title && !filters.company && !filters.location && !filters.industry) {
+      return {
+        query: {
+          match_all: {}
+        },
+        size: 10
+      };
     }
     
+    // Otherwise, build a query with the provided filters
+    const queryObj: any = {
+      query: {
+        bool: {
+          must: [] as any[]
+        }
+      },
+      size: 10
+    };
+
+    // Add title filter
+    if (filters.title && filters.title !== 'any') {
+      queryObj.query.bool.must.push({
+        match_phrase_prefix: {
+          position: filters.title
+        }
+      });
+    }
+
     // Add company filter
     if (filters.company && filters.company !== 'any') {
-      query.bool.must.push({
-        match: { "workplace.name": filters.company }
+      queryObj.query.bool.must.push({
+        match_phrase_prefix: {
+          company_name: filters.company
+        }
       });
     }
-    
+
     // Add location filter
     if (filters.location && filters.location !== 'any') {
-      query.bool.must.push({
+      queryObj.query.bool.must.push({
         bool: {
           should: [
-            { match: { "location.country": filters.location } },
-            { match: { "location.city": filters.location } }
+            { match_phrase_prefix: { country: filters.location } },
+            { match_phrase_prefix: { city: filters.location } },
+            { match_phrase_prefix: { region: filters.location } }
           ],
           minimum_should_match: 1
         }
       });
     }
-    
+
     // Add industry filter
     if (filters.industry && filters.industry !== 'all') {
-      query.bool.must.push({
-        match: { "workplace.industry": filters.industry }
-      });
-    }
-    
-    // Add company size filter
-    if (filters.companySize && filters.companySize !== 'any_size') {
-      // Map company size to employee count range
-      const sizeRanges: Record<string, [number, number]> = {
-        'small': [1, 50],
-        'medium': [51, 200],
-        'large': [201, 1000],
-        'enterprise': [1001, 10000],
-        'very_large': [10001, 1000000]
-      };
-      
-      const range = sizeRanges[filters.companySize] || [1, 1000000];
-      
-      query.bool.must.push({
-        range: {
-          "workplace.employee_count": {
-            gte: range[0],
-            lte: range[1]
-          }
+      queryObj.query.bool.must.push({
+        match_phrase_prefix: {
+          company_industry: filters.industry
         }
       });
     }
-    
-    return query;
+
+    return queryObj;
   }
-  
+
   /**
-   * Build a search query to find a person by name
+   * Build a query to find an employee by ID
    */
-  private buildNameSearchQuery(lead: Lead): any {
+  private buildEmployeeByIdQuery(id: string): any {
     return {
-      bool: {
-        must: [
-          { match: { "first_name": lead.first_name || '' } },
-          { match: { "last_name": lead.last_name || '' } }
-        ]
+      query: {
+        match: {
+          "id": id
+        }
       }
     };
   }
   
   /**
-   * Search for employees using Coresignal's Multi-source Employee API
+   * Build a query to find an employee by name
    */
-  private async searchEmployees(query: any, apiKey: string): Promise<any[]> {
-    try {
-      const response = await axios.post(
-        'https://api.coresignal.com/v1/multi_source/employee/search/es_dsl',
-        {
-          query,
-          size: 100,
-          _source: [
-            "id",
-            "first_name",
-            "last_name",
-            "professional_network_url",
-            "primary_professional_email",
-            "job_title",
-            "workplace.name",
-            "workplace.industry",
-            "location.city",
-            "location.country"
+  private buildEmployeeByNameQuery(lead: Lead): any {
+    return {
+      query: {
+        bool: {
+          should: [
+            { match_phrase_prefix: { "first_name": lead.first_name || '' } },
+            { match_phrase_prefix: { "last_name": lead.last_name || '' } }
           ]
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
         }
-      );
-      
-      if (response.data && response.data.hits && response.data.hits.hits) {
-        return response.data.hits.hits.map((hit: any) => hit._source);
       }
-      
-      return [];
-    } catch (error) {
-      console.error('Error searching Coresignal employees:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('API Response:', error.response?.data);
-      }
-      throw new Error('Failed to search for employees in Coresignal');
-    }
+    };
   }
   
   /**
@@ -376,54 +456,40 @@ class CoresignalService implements LeadGenerationService {
   private async collectById(employeeId: string, apiKey: string): Promise<any> {
     try {
       const response = await axios.get(
-        `https://api.coresignal.com/v1/multi_source/employee/collect/${employeeId}`,
+        `https://api.coresignal.com/cdapi/v2/employee_multi_source/collect/${employeeId}`,
         {
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
+            'apikey': apiKey,
             'Content-Type': 'application/json'
           }
         }
       );
       
-      if (response.data) {
-        return response.data;
-      }
-      
-      return null;
+      return response.data;
     } catch (error) {
-      console.error('Error collecting Coresignal employee by ID:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('API Response:', error.response?.data);
-      }
+      console.error(`Error collecting employee data for ID ${employeeId}:`, error);
       return null;
     }
   }
-  
+
   /**
-   * Collect employee data by shorthand name using Coresignal's Multi-source Employee API
+   * Collect employee data by shorthand name (e.g., linkedin profile name)
    */
   private async collectByShorthandName(shorthandName: string, apiKey: string): Promise<any> {
     try {
+      const headers = {
+        'apikey': apiKey,
+        'Content-Type': 'application/json'
+      };
+      
       const response = await axios.get(
-        `https://api.coresignal.com/v1/multi_source/employee/collect/${shorthandName}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        `https://api.coresignal.com/cdapi/v2/employee_multi_source/collect/${shorthandName}`,
+        { headers }
       );
       
-      if (response.data) {
-        return response.data;
-      }
-      
-      return null;
+      return response.data;
     } catch (error) {
-      console.error('Error collecting Coresignal employee by shorthand name:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('API Response:', error.response?.data);
-      }
+      console.error(`Error collecting employee by shorthand name ${shorthandName}:`, error);
       return null;
     }
   }
@@ -502,6 +568,37 @@ class CoresignalService implements LeadGenerationService {
       console.error('Error formatting Coresignal result:', error);
       return null;
     }
+  }
+  
+  private formatEmployeeToLead(employee: Record<string, any>): Lead {
+    return {
+      first_name: employee.first_name || '',
+      last_name: employee.last_name || '',
+      email: employee.primary_professional_email || '',
+      position: employee.job_title || '',
+      company: employee.workplace?.name || '',
+      linkedin_url: employee.professional_network_url || '',
+      domain: employee.workplace?.domain || '',
+      status: LeadStatus.New,
+      company_data: {
+        name: employee.workplace?.name || '',
+        industry: employee.workplace?.industry || '',
+        size: employee.workplace?.employee_count?.toString() || '',
+        location: {
+          country: employee.location?.country || '',
+          locality: employee.location?.city || ''
+        }
+      }
+    };
+  }
+  
+  private getFiltersCovered(filters: LeadSearchFilters): string[] {
+    return Object.keys(filters).filter(key => !!filters[key as keyof LeadSearchFilters]);
+  }
+  
+  private enhanceLeadWithEmployeeData(lead: Lead, employeeData: any): Lead {
+    const enrichedFields = this.processEnrichedData(employeeData);
+    return { ...lead, ...enrichedFields };
   }
 }
 

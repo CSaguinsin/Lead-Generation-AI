@@ -101,6 +101,7 @@ export function LeadsTabs({
                                         <TableHead>Title</TableHead>
                                         <TableHead>Company</TableHead>
                                         <TableHead>Email</TableHead>
+                                        <TableHead>Phone</TableHead>
                                         <TableHead>Location</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -128,6 +129,17 @@ export function LeadsTabs({
                                                 ) : (
                                                     <span className="text-muted-foreground italic text-sm">
                                                         No email available
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {person.phone_number ? (
+                                                    <span className="text-gray-700">
+                                                        {person.phone_number}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground italic text-sm">
+                                                        No phone available
                                                     </span>
                                                 )}
                                             </TableCell>
